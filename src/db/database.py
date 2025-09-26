@@ -223,8 +223,9 @@ class DatabaseManager:
             client = self.get_client()
             user_id = self.get_current_user_id()
             
+            # 로그인하지 않은 경우 임시 사용자 ID 사용
             if not user_id:
-                return {"success": False, "message": "로그인이 필요합니다."}
+                user_id = self.get_or_create_anonymous_user_id()
             
             project_data = {
                 "user_id": user_id,
@@ -248,8 +249,9 @@ class DatabaseManager:
             client = self.get_client()
             user_id = self.get_current_user_id()
             
+            # 로그인하지 않은 경우 임시 사용자 ID 사용
             if not user_id:
-                return []
+                user_id = self.get_or_create_anonymous_user_id()
             
             response = client.table("projects")\
                 .select("*")\
@@ -268,8 +270,9 @@ class DatabaseManager:
             client = self.get_client()
             user_id = self.get_current_user_id()
             
+            # 로그인하지 않은 경우 임시 사용자 ID 사용
             if not user_id:
-                return {"success": False, "message": "로그인이 필요합니다."}
+                user_id = self.get_or_create_anonymous_user_id()
             
             response = client.table("projects")\
                 .delete()\
@@ -419,8 +422,9 @@ class DatabaseManager:
             client = self.get_client()
             user_id = self.get_current_user_id()
             
+            # 로그인하지 않은 경우 임시 사용자 ID 사용
             if not user_id:
-                return {"success": False, "message": "로그인이 필요합니다."}
+                user_id = self.get_or_create_anonymous_user_id()
             
             assignment_data = {
                 "project_id": project_id,
@@ -493,8 +497,9 @@ class DatabaseManager:
             client = self.get_client()
             user_id = self.get_current_user_id()
             
+            # 로그인하지 않은 경우 임시 사용자 ID 사용
             if not user_id:
-                return {"success": False, "message": "로그인이 필요합니다."}
+                user_id = self.get_or_create_anonymous_user_id()
             
             metric_data = {
                 "project_id": metric.project_id,
