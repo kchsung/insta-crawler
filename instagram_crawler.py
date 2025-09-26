@@ -18,17 +18,59 @@ class InstagramCrawler:
         self.driver = None
         
     def setup_driver(self):
-        """Chrome 드라이버 설정"""
+        """Chrome 드라이버 설정 (Instagram 자동화 감지 우회)"""
         chrome_options = Options()
         chrome_options.add_argument("--headless")  # 브라우저 창을 숨김
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--disable-gpu")
         chrome_options.add_argument("--window-size=1920,1080")
-        chrome_options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
+        
+        # 최신 User-Agent 사용 (2024년 Chrome 120)
+        chrome_options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+        
+        # 자동화 감지 우회 옵션들
+        chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        chrome_options.add_experimental_option('useAutomationExtension', False)
+        chrome_options.add_argument("--disable-web-security")
+        chrome_options.add_argument("--allow-running-insecure-content")
+        chrome_options.add_argument("--disable-features=VizDisplayCompositor")
+        chrome_options.add_argument("--disable-ipc-flooding-protection")
+        chrome_options.add_argument("--disable-background-timer-throttling")
+        chrome_options.add_argument("--disable-backgrounding-occluded-windows")
+        chrome_options.add_argument("--disable-renderer-backgrounding")
+        chrome_options.add_argument("--disable-field-trial-config")
+        chrome_options.add_argument("--disable-back-forward-cache")
+        chrome_options.add_argument("--disable-hang-monitor")
+        chrome_options.add_argument("--disable-prompt-on-repost")
+        chrome_options.add_argument("--disable-sync")
+        chrome_options.add_argument("--disable-translate")
+        chrome_options.add_argument("--disable-background-networking")
+        chrome_options.add_argument("--disable-default-apps")
+        chrome_options.add_argument("--disable-extensions")
+        chrome_options.add_argument("--disable-plugins")
+        chrome_options.add_argument("--disable-images")
+        
+        # GPU 관련 경고 제거 및 로그 레벨 설정
+        chrome_options.add_argument("--enable-unsafe-swiftshader")  # GPU 경고 해결
+        chrome_options.add_argument("--disable-software-rasterizer")
+        chrome_options.add_argument("--disable-gpu-sandbox")
+        chrome_options.add_argument("--log-level=3")  # FATAL 레벨만 표시
+        chrome_options.add_argument("--silent")
+        chrome_options.add_argument("--disable-logging")
+        chrome_options.add_argument("--disable-gpu-logging")
+        chrome_options.add_argument("--disable-gpu-watchdog")
+        chrome_options.add_argument("--disable-gpu-process-crash-limit")
         
         service = Service(ChromeDriverManager().install())
         self.driver = webdriver.Chrome(service=service, options=chrome_options)
+        
+        # JavaScript로 자동화 속성 숨기기
+        self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+        self.driver.execute_script("Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]})")
+        self.driver.execute_script("Object.defineProperty(navigator, 'languages', {get: () => ['ko-KR', 'ko', 'en-US', 'en']})")
+        
         return self.driver
     
     def extract_numbers(self, text):
@@ -61,12 +103,28 @@ class InstagramCrawler:
             })
             
             self.driver.get(url)
-            time.sleep(5)  # 모바일 버전 로딩을 위해 대기 시간 증가
             
-            # 페이지 로딩 대기
-            WebDriverWait(self.driver, 15).until(
+            # 랜덤 대기 시간 (3-7초)
+            wait_time = random.uniform(3, 7)
+            time.sleep(wait_time)
+            
+            # 자연스러운 브라우저 동작 시뮬레이션
+            try:
+                # 페이지 스크롤 (자연스러운 사용자 행동)
+                self.driver.execute_script("window.scrollTo(0, 100);")
+                time.sleep(random.uniform(1, 2))
+                self.driver.execute_script("window.scrollTo(0, 0);")
+                time.sleep(random.uniform(1, 2))
+            except:
+                pass
+            
+            # 페이지 로딩 대기 (타임아웃 증가)
+            WebDriverWait(self.driver, 25).until(
                 EC.presence_of_element_located((By.TAG_NAME, "main"))
             )
+            
+            # 추가 대기 시간 (Instagram의 동적 로딩을 위해)
+            time.sleep(random.uniform(2, 4))
             
             # 디버그 모드일 때 페이지 정보 출력
             if debug_mode:
@@ -110,6 +168,20 @@ class InstagramCrawler:
             if likes == 0 or comments == 0:
                 if debug_mode:
                     st.write("Meta 태그에서 데이터를 찾을 수 없어 기존 방식으로 시도합니다...")
+                
+                # 자연스러운 사용자 행동 시뮬레이션
+                try:
+                    # 마우스 움직임 시뮬레이션
+                    from selenium.webdriver.common.action_chains import ActionChains
+                    actions = ActionChains(self.driver)
+                    actions.move_by_offset(100, 100).perform()
+                    time.sleep(random.uniform(0.5, 1.5))
+                    
+                    # 페이지 새로고침 (자연스러운 행동)
+                    self.driver.refresh()
+                    time.sleep(random.uniform(3, 5))
+                except:
+                    pass
                 
                 # 좋아요 수 추출 - 기존 방식
                 if likes == 0:
@@ -183,12 +255,22 @@ class InstagramCrawler:
             }
             
         except TimeoutException:
+            error_msg = '페이지 로딩 시간 초과'
+            if debug_mode:
+                st.error(f"⏰ 타임아웃 에러: {error_msg}")
+                st.warning("""
+                **타임아웃 해결 방법:**
+                1. 네트워크 연결 상태를 확인하세요
+                2. Instagram 서버가 느릴 수 있으니 잠시 후 재시도하세요
+                3. 다른 Instagram 포스트로 테스트해보세요
+                4. VPN을 사용 중이라면 비활성화해보세요
+                """)
             return {
                 'url': url,
                 'likes': 0,
                 'comments': 0,
                 'status': 'timeout',
-                'error': '페이지 로딩 시간 초과'
+                'error': error_msg
             }
         except Exception as e:
             return {
@@ -243,9 +325,9 @@ class InstagramCrawler:
                     'error': result.get('error', '')
                 })
                 
-                # 쿨다운 시간 (20-40초 랜덤)
+                # 쿨다운 시간 (30-60초 랜덤 - Instagram 감지 우회를 위해 증가)
                 if index < total_posts - 1:  # 마지막 포스트가 아닌 경우에만
-                    cooldown_time = random.randint(20, 40)
+                    cooldown_time = random.randint(30, 60)
                     if progress_callback:
                         progress_callback(index + 1, total_posts, f"쿨다운 중... {cooldown_time}초 대기")
                     time.sleep(cooldown_time)

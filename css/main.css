@@ -1,0 +1,525 @@
+/* Instagram 크롤러 메인 스타일 */
+
+/* 상단 공간 최소화 */
+section.main > div.block-container {
+    max-width: 100% !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding-top: 0.5rem !important;           /* 상단 여백 최소화 */
+    padding-bottom: 1rem !important;
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+}
+
+/* 첫 요소(타이틀/탭 등) 위 여백 제거 */
+section.main > div.block-container > :first-child { 
+    margin-top: 0 !important; 
+}
+
+/* 제목 기본 마진 최소화 */
+h1, h2, h3 { 
+    margin-top: 0 !important; 
+    margin-bottom: 0.5rem !important; 
+}
+
+/* 탭 상단 여백 제거 */
+div[data-baseweb="tab-list"] { 
+    margin-top: 0 !important; 
+}
+
+/* 가로 블록이 중앙 정렬되는 문제 방지 */
+div[data-testid="stHorizontalBlock"] { 
+    justify-content: flex-start !important; 
+}
+
+/* Streamlit 기본 헤더 숨기기 */
+#MainMenu { 
+    display: none !important; 
+}
+
+/* Streamlit 기본 푸터 숨기기 */
+footer { 
+    display: none !important; 
+}
+
+/* Streamlit 기본 헤더 영역 최소화 */
+header[data-testid="stHeader"] {
+    height: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
+/* 전체 레이아웃 */
+.main-container {
+    display: flex;
+    min-height: 100vh;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+/* 좌측 로그인 패널 */
+.login-panel {
+    width: 35%;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    padding: 2rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    box-shadow: 2px 0 20px rgba(0, 0, 0, 0.1);
+}
+
+/* 우측 메인 컨텐츠 */
+.main-content {
+    width: 65%;
+    background: rgba(255, 255, 255, 0.9);
+    backdrop-filter: blur(10px);
+    padding: 2rem;
+    overflow-y: auto;
+}
+
+/* 로그인 폼 스타일 */
+.login-form {
+    background: white;
+    padding: 2rem;
+    border-radius: 15px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+    margin-bottom: 2rem;
+}
+
+.login-form h2 {
+    color: #333;
+    text-align: center;
+    margin-bottom: 1.5rem;
+    font-weight: 600;
+}
+
+/* 입력 필드 스타일 */
+.stTextInput > div > div > input {
+    border-radius: 10px;
+    border: 2px solid #e1e5e9;
+    padding: 0.75rem;
+    font-size: 1rem;
+    transition: all 0.3s ease;
+}
+
+.stTextInput > div > div > input:focus {
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+/* 버튼 스타일 */
+.stButton > button {
+    border-radius: 10px;
+    padding: 0.75rem 1.5rem;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    border: none;
+    width: 100%;
+    margin-top: 1rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.9rem;
+}
+
+.stButton > button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+}
+
+/* 메인 버튼 (Primary) */
+.stButton > button[kind="primary"] {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+}
+
+.stButton > button[kind="primary"]:hover {
+    background: linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%);
+}
+
+/* 보조 버튼 (Secondary) */
+.stButton > button[kind="secondary"] {
+    background: #f8f9fa;
+    color: #6c757d;
+    border: 2px solid #e9ecef;
+}
+
+.stButton > button[kind="secondary"]:hover {
+    background: #e9ecef;
+    color: #495057;
+}
+
+/* 메트릭 카드 스타일 */
+.metric-card {
+    background: white;
+    padding: 1.5rem;
+    border-radius: 15px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+    text-align: center;
+    margin: 0.5rem;
+    transition: transform 0.3s ease;
+}
+
+.metric-card:hover {
+    transform: translateY(-5px);
+}
+
+/* 탭 스타일 */
+.stTabs [data-baseweb="tab-list"] {
+    gap: 1rem;
+}
+
+.stTabs [data-baseweb="tab"] {
+    border-radius: 10px;
+    padding: 0.75rem 1.5rem;
+    font-weight: 600;
+    transition: all 0.3s ease;
+}
+
+.stTabs [aria-selected="true"] {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+}
+
+/* 데이터프레임 스타일 */
+.stDataFrame {
+    border-radius: 15px;
+    overflow: hidden;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+}
+
+/* 진행률 바 스타일 */
+.stProgress > div > div > div > div {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 10px;
+}
+
+/* 알림 메시지 스타일 */
+.stAlert {
+    border-radius: 10px;
+    border: none;
+    padding: 1rem 1.5rem;
+    margin: 1rem 0;
+}
+
+.stSuccess {
+    background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+    color: #155724;
+}
+
+.stError {
+    background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);
+    color: #721c24;
+}
+
+.stWarning {
+    background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
+    color: #856404;
+}
+
+.stInfo {
+    background: linear-gradient(135deg, #d1ecf1 0%, #bee5eb 100%);
+    color: #0c5460;
+}
+
+/* 사이드바 스타일 */
+.stSidebar {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    border-right: 1px solid rgba(102, 126, 234, 0.1);
+}
+
+/* 사이드바 상단 공간 최소화 */
+.stSidebar > div:first-child {
+    padding-top: 0.5rem !important;
+}
+
+/* 사이드바 내부 요소 상단 여백 제거 */
+.stSidebar .stMarkdown:first-child {
+    margin-top: 0 !important;
+}
+
+/* 사이드바 내부 요소 스타일 */
+.stSidebar .stMarkdown {
+    margin-bottom: 0.5rem;
+}
+
+.stSidebar .stSuccess {
+    background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+    color: #155724;
+    border: none;
+    border-radius: 10px;
+    padding: 0.75rem;
+    margin-bottom: 1rem;
+    font-size: 0.9rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* 파일 업로더 스타일 */
+.stFileUploader > div {
+    border: 2px dashed #667eea;
+    border-radius: 15px;
+    padding: 2rem;
+    text-align: center;
+    background: rgba(102, 126, 234, 0.05);
+    transition: all 0.3s ease;
+}
+
+.stFileUploader > div:hover {
+    border-color: #5a6fd8;
+    background: rgba(102, 126, 234, 0.1);
+}
+
+/* 체크박스 스타일 */
+.stCheckbox > label > div {
+    border-radius: 5px;
+}
+
+/* 스피너 스타일 */
+.stSpinner {
+    color: #667eea;
+}
+
+/* 다운로드 버튼 스타일 */
+.stDownloadButton > button {
+    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+    color: white;
+    border-radius: 10px;
+    padding: 0.75rem 1.5rem;
+    font-weight: 600;
+    transition: all 0.3s ease;
+}
+
+.stDownloadButton > button:hover {
+    background: linear-gradient(135deg, #218838 0%, #1ea085 100%);
+    transform: translateY(-2px);
+}
+
+/* 반응형 디자인 */
+@media (max-width: 768px) {
+    .main-container {
+        flex-direction: column;
+    }
+    
+    .login-panel {
+        width: 100%;
+        min-height: 50vh;
+    }
+    
+    .main-content {
+        width: 100%;
+        min-height: 50vh;
+    }
+}
+
+/* 커스텀 스크롤바 */
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%);
+}
+
+/* 애니메이션 */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.fade-in {
+    animation: fadeIn 0.5s ease-out;
+}
+
+/* 로고 및 브랜딩 */
+.brand-logo {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+.brand-logo h1 {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    font-size: 2.5rem;
+    font-weight: 700;
+    margin: 0;
+}
+
+.brand-logo p {
+    color: #6c757d;
+    margin-top: 0.5rem;
+    font-size: 1.1rem;
+}
+
+/* 추가 UI 개선사항 */
+/* 폼 스타일 개선 */
+.stForm {
+    background: rgba(255, 255, 255, 0.8);
+    padding: 1.5rem;
+    border-radius: 15px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+    margin-bottom: 1rem;
+}
+
+/* 입력 필드 개선 */
+.stTextInput > div > div > input,
+.stTextArea > div > div > textarea,
+.stSelectbox > div > div > select {
+    border-radius: 10px;
+    border: 2px solid #e1e5e9;
+    padding: 0.75rem;
+    font-size: 1rem;
+    transition: all 0.3s ease;
+    background: white;
+}
+
+.stTextInput > div > div > input:focus,
+.stTextArea > div > div > textarea:focus,
+.stSelectbox > div > div > select:focus {
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    outline: none;
+}
+
+/* 체크박스 개선 */
+.stCheckbox > label {
+    font-weight: 500;
+    color: #495057;
+}
+
+/* 라디오 버튼 개선 */
+.stRadio > label {
+    font-weight: 500;
+    color: #495057;
+}
+
+/* 탭 개선 */
+.stTabs [data-baseweb="tab-list"] {
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.stTabs [data-baseweb="tab"] {
+    border-radius: 10px;
+    padding: 0.75rem 1.5rem;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    background: rgba(102, 126, 234, 0.1);
+    color: #667eea;
+}
+
+.stTabs [aria-selected="true"] {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+}
+
+/* 메트릭 카드 개선 */
+[data-testid="metric-container"] {
+    background: white;
+    padding: 1.5rem;
+    border-radius: 15px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+    border: 1px solid rgba(102, 126, 234, 0.1);
+    transition: transform 0.3s ease;
+}
+
+[data-testid="metric-container"]:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+}
+
+/* 데이터프레임 개선 */
+.stDataFrame {
+    border-radius: 15px;
+    overflow: hidden;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+    border: 1px solid rgba(102, 126, 234, 0.1);
+}
+
+/* 진행률 바 개선 */
+.stProgress > div > div > div > div {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 10px;
+    height: 8px;
+}
+
+/* 스피너 개선 */
+.stSpinner {
+    color: #667eea;
+    border: 3px solid rgba(102, 126, 234, 0.1);
+    border-top: 3px solid #667eea;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* 다운로드 버튼 개선 */
+.stDownloadButton > button {
+    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+    color: white;
+    border-radius: 10px;
+    padding: 0.75rem 1.5rem;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    border: none;
+    box-shadow: 0 3px 10px rgba(40, 167, 69, 0.3);
+}
+
+.stDownloadButton > button:hover {
+    background: linear-gradient(135deg, #218838 0%, #1ea085 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(40, 167, 69, 0.4);
+}
+
+/* 익스팬더 개선 */
+.stExpander {
+    border: 1px solid rgba(102, 126, 234, 0.1);
+    border-radius: 15px;
+    margin-bottom: 1rem;
+    overflow: hidden;
+}
+
+.stExpander > div:first-child {
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+    padding: 1rem;
+    font-weight: 600;
+    color: #667eea;
+}
+
+/* 컨테이너 개선 */
+.stContainer {
+    background: rgba(255, 255, 255, 0.8);
+    padding: 1.5rem;
+    border-radius: 15px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+    margin-bottom: 1rem;
+    border: 1px solid rgba(102, 126, 234, 0.1);
+}
