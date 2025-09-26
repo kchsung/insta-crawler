@@ -186,23 +186,18 @@ def render_batch_crawl_form() -> Dict[str, Any]:
                 with status_container:
                     status_text = st.empty()
                 
-                # 진행률 콜백 함수
-                def update_progress(current, total, message):
-                    # 안전한 진행률 계산
-                    if total > 0:
-                        progress = min(max(current / total, 0.0), 1.0)  # 0.0과 1.0 사이로 제한
-                    else:
-                        progress = 0.0
-                    
-                    progress_bar.progress(progress)
-                    progress_text.text(f"진행률: {current}/{total} ({progress*100:.1f}%)")
-                    status_text.text(f"상태: {message}")
-                
-                # 크롤링 실행
+                # 크롤링 실행 (안전한 WebSocket 업데이트 사용)
                 with results_container:
                     with st.spinner(""):
                         crawler = InstagramCrawler()
-                        results = crawler.batch_crawl_instagram_posts(valid_df, update_progress)
+                        # 새로운 안전한 progress callback 사용
+                        results = crawler.batch_crawl_instagram_posts(
+                            valid_df, 
+                            progress_callback=None,  # 기존 콜백 대신 안전한 방식 사용
+                            progress_bar=progress_bar,
+                            progress_text=progress_text,
+                            status_text=status_text
+                        )
                         crawler.close_driver()
                 
                 # 결과를 데이터베이스에 저장

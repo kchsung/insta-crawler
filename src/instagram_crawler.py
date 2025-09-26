@@ -13,10 +13,30 @@ from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 import pandas as pd
+import asyncio
+import logging
+
+# WebSocket 에러 방어를 위한 로깅 설정
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+def safe_streamlit_update(progress_bar, progress_text, status_text, progress, current, total, message):
+    """WebSocket 에러를 방어하는 안전한 Streamlit 업데이트 함수"""
+    try:
+        # 연결 상태 확인
+        if hasattr(st, '_session_state') and st._session_state:
+            progress_bar.progress(progress)
+            progress_text.text(f"진행률: {current}/{total} ({progress*100:.1f}%)")
+            status_text.text(f"상태: {message}")
+    except Exception as e:
+        # WebSocket 에러나 기타 예외 발생 시 로그만 남기고 조용히 무시
+        logger.warning(f"Streamlit 업데이트 실패 (정상적인 상황일 수 있음): {str(e)}")
+        pass
 
 class InstagramCrawler:
     def __init__(self):
         self.driver = None
+        self._background_tasks = set()  # 백그라운드 태스크 관리
         
     def setup_driver(self):
         """Chrome 드라이버 설정 (Instagram 자동화 감지 우회)"""
@@ -783,7 +803,7 @@ class InstagramCrawler:
                 'error': str(e)
             }
     
-    def batch_crawl_instagram_posts(self, excel_data, progress_callback=None):
+    def batch_crawl_instagram_posts(self, excel_data, progress_callback=None, progress_bar=None, progress_text=None, status_text=None):
         """엑셀 데이터로부터 여러 Instagram 포스트 일괄 크롤링"""
         results = []
         total_posts = len(excel_data)
@@ -811,9 +831,19 @@ class InstagramCrawler:
                 continue
             
             try:
-                # 진행률 업데이트 (크롤링 시작 전)
-                if progress_callback:
-                    progress_callback(index + 1, total_posts, f"크롤링 중: {name}")
+                # 안전한 진행률 업데이트 (크롤링 시작 전)
+                if progress_callback and progress_bar and progress_text and status_text:
+                    try:
+                        progress = min(max((index + 1) / total_posts, 0.0), 1.0)
+                        safe_streamlit_update(progress_bar, progress_text, status_text, progress, index + 1, total_posts, f"크롤링 중: {name}")
+                    except Exception as e:
+                        logger.warning(f"진행률 업데이트 실패: {str(e)}")
+                elif progress_callback:
+                    # 기존 방식도 지원 (하위 호환성)
+                    try:
+                        progress_callback(index + 1, total_posts, f"크롤링 중: {name}")
+                    except Exception as e:
+                        logger.warning(f"기존 진행률 콜백 실패: {str(e)}")
                 
                 # 크롤링 실행
                 result = self.crawl_instagram_post(url, debug_mode=False)
@@ -830,13 +860,30 @@ class InstagramCrawler:
                 # 쿨다운 시간 (30-60초 랜덤 - Instagram 감지 우회를 위해 증가)
                 if index < total_posts - 1:  # 마지막 포스트가 아닌 경우에만
                     cooldown_time = random.randint(30, 60)
-                    if progress_callback:
-                        progress_callback(index + 1, total_posts, f"쿨다운 중... {cooldown_time}초 대기")
+                    if progress_callback and progress_bar and progress_text and status_text:
+                        try:
+                            progress = min(max((index + 1) / total_posts, 0.0), 1.0)
+                            safe_streamlit_update(progress_bar, progress_text, status_text, progress, index + 1, total_posts, f"쿨다운 중... {cooldown_time}초 대기")
+                        except Exception as e:
+                            logger.warning(f"쿨다운 진행률 업데이트 실패: {str(e)}")
+                    elif progress_callback:
+                        try:
+                            progress_callback(index + 1, total_posts, f"쿨다운 중... {cooldown_time}초 대기")
+                        except Exception as e:
+                            logger.warning(f"쿨다운 진행률 콜백 실패: {str(e)}")
                     time.sleep(cooldown_time)
                 else:
                     # 마지막 포스트 완료
-                    if progress_callback:
-                        progress_callback(total_posts, total_posts, "크롤링 완료!")
+                    if progress_callback and progress_bar and progress_text and status_text:
+                        try:
+                            safe_streamlit_update(progress_bar, progress_text, status_text, 1.0, total_posts, total_posts, "크롤링 완료!")
+                        except Exception as e:
+                            logger.warning(f"완료 진행률 업데이트 실패: {str(e)}")
+                    elif progress_callback:
+                        try:
+                            progress_callback(total_posts, total_posts, "크롤링 완료!")
+                        except Exception as e:
+                            logger.warning(f"완료 진행률 콜백 실패: {str(e)}")
                     
             except Exception as e:
                 results.append({
@@ -852,7 +899,20 @@ class InstagramCrawler:
         return results
     
     def close_driver(self):
-        """드라이버 종료"""
+        """드라이버 종료 및 백그라운드 태스크 정리"""
+        # 백그라운드 태스크 정리
+        for task in list(self._background_tasks):
+            try:
+                task.cancel()
+            except Exception as e:
+                logger.warning(f"백그라운드 태스크 취소 실패: {str(e)}")
+        self._background_tasks.clear()
+        
+        # 드라이버 종료
         if self.driver:
-            self.driver.quit()
-            self.driver = None
+            try:
+                self.driver.quit()
+            except Exception as e:
+                logger.warning(f"드라이버 종료 중 오류: {str(e)}")
+            finally:
+                self.driver = None
