@@ -400,8 +400,30 @@ def render_batch_url_crawl():
     st.subheader("📊 복수 URL 크롤링")
     st.markdown("데이터베이스에서 업데이트할 목록을 선택하여 일괄 크롤링을 수행합니다.")
     
-    # 데이터베이스에서 크롤링할 목록 조회
+    # 데이터베이스에서 크롤링할 목록 조회 (캐싱 적용)
     st.subheader("📋 크롤링 대상 선택")
+    
+    # 캐시 키 생성
+    cache_key = "influencers_data"
+    
+    # 세션 상태에서 캐시된 데이터 확인
+    if cache_key not in st.session_state:
+        with st.spinner("인플루언서 데이터를 불러오는 중..."):
+            st.session_state[cache_key] = db_manager.get_influencers()
+    
+    # 캐시된 데이터 사용
+    all_influencers_data = st.session_state[cache_key]
+    
+    # 데이터 새로고침 버튼
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.info(f"📊 총 {len(all_influencers_data)}명의 인플루언서 데이터가 캐시되어 있습니다.")
+    with col2:
+        if st.button("🔄 새로고침", help="데이터베이스에서 최신 데이터를 다시 불러옵니다"):
+            with st.spinner("데이터를 새로고침하는 중..."):
+                st.session_state[cache_key] = db_manager.get_influencers()
+            st.success("데이터가 새로고침되었습니다!")
+            st.rerun()
     
     # 플랫폼별 필터
     platform_filter = st.selectbox(
@@ -450,11 +472,9 @@ def render_batch_url_crawl():
             help="아직 크롤링되지 않은 인플루언서만 선택합니다 (first_crawled = FALSE)"
         )
     
-    # 전체 인플루언서 목록 조회 (필터링 없이 - 실제 전체 수를 확인하기 위해)
-    all_influencers_total = db_manager.get_influencers(
-        platform=platform_filter if platform_filter != "전체" else None,
-        first_crawled_only=False  # 전체 수를 확인하기 위해 False로 고정
-    )
+    # 캐시된 데이터에서 필터링 (DB 호출 없이)
+    all_influencers_total = [inf for inf in all_influencers_data 
+                           if platform_filter == "전체" or inf['platform'] == platform_filter]
     
     # 필터링된 인플루언서 목록 조회 (실제 표시할 목록)
     filtered_influencers = db_manager.get_influencers_with_update_filter(
@@ -546,18 +566,7 @@ def render_batch_url_crawl():
         with status_container:
             status_text = st.empty()
         
-        # 진행률 콜백 함수
-        def update_progress(current, total, message):
-            if total > 0:
-                progress = min(max(current / total, 0.0), 1.0)
-            else:
-                progress = 0.0
-            
-            progress_bar.progress(progress)
-            progress_text.text(f"진행률: {current}/{total} ({progress*100:.1f}%)")
-            status_text.text(f"상태: {message}")
-        
-        # 크롤링 실행
+        # 크롤링 실행 (안전한 WebSocket 업데이트 사용)
         with results_container:
             with st.spinner(""):
                 crawler = InstagramCrawler()
@@ -577,7 +586,22 @@ def render_batch_url_crawl():
                     influencer_id = influencer_options_to_use[influencer_name]
                     influencer = next(inf for inf in influencers_to_use if inf['id'] == influencer_id)
                     
-                    update_progress(i, len(selected_influencers), f"크롤링 중: {influencer.get('influencer_name') or influencer['sns_id']}")
+                    # 안전한 진행률 업데이트
+                    try:
+                        from src.instagram_crawler import safe_streamlit_update
+                        progress = min(max(i / len(selected_influencers), 0.0), 1.0)
+                        safe_streamlit_update(
+                            progress_bar, 
+                            progress_text, 
+                            status_text, 
+                            progress, 
+                            i, 
+                            len(selected_influencers), 
+                            f"크롤링 중: {influencer.get('influencer_name') or influencer['sns_id']}"
+                        )
+                    except Exception as e:
+                        # 진행률 업데이트 실패 시 조용히 무시
+                        pass
                     
                     try:
                         # 단일 URL 크롤링 자동화 - 인플루언서 프로필 크롤링
@@ -638,7 +662,22 @@ def render_batch_url_crawl():
                         })
                 
                 crawler.close_driver()
-                update_progress(len(selected_influencers), len(selected_influencers), "크롤링 완료")
+                
+                # 안전한 완료 진행률 업데이트
+                try:
+                    from src.instagram_crawler import safe_streamlit_update
+                    safe_streamlit_update(
+                        progress_bar, 
+                        progress_text, 
+                        status_text, 
+                        1.0, 
+                        len(selected_influencers), 
+                        len(selected_influencers), 
+                        "크롤링 완료"
+                    )
+                except Exception as e:
+                    # 진행률 업데이트 실패 시 조용히 무시
+                    pass
         
         # 결과를 데이터베이스에 저장 (인플루언서 프로필 크롤링 결과)
         successful_crawls = 0
@@ -862,9 +901,30 @@ def render_influencer_tab():
                     else:
                         st.error(f"인플루언서 등록 실패: {result['message']}")
     
-    # 기존 인플루언서 목록
+    # 기존 인플루언서 목록 (캐싱 적용)
     st.subheader("👥 인플루언서 목록")
-    influencers = db_manager.get_influencers()
+    
+    # 캐시 키 생성
+    cache_key = "influencers_data"
+    
+    # 세션 상태에서 캐시된 데이터 확인
+    if cache_key not in st.session_state:
+        with st.spinner("인플루언서 데이터를 불러오는 중..."):
+            st.session_state[cache_key] = db_manager.get_influencers()
+    
+    # 캐시된 데이터 사용
+    influencers = st.session_state[cache_key]
+    
+    # 데이터 새로고침 버튼
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.info(f"📊 총 {len(influencers)}명의 인플루언서 데이터가 캐시되어 있습니다.")
+    with col2:
+        if st.button("🔄 새로고침", help="데이터베이스에서 최신 데이터를 다시 불러옵니다", key="refresh_influencers"):
+            with st.spinner("데이터를 새로고침하는 중..."):
+                st.session_state[cache_key] = db_manager.get_influencers()
+            st.success("데이터가 새로고침되었습니다!")
+            st.rerun()
     
     if influencers:
         # 플랫폼별 필터
@@ -908,6 +968,102 @@ def render_influencer_tab():
                 st.divider()
     else:
         st.info("등록된 인플루언서가 없습니다.")
+
+def render_performance_crawl():
+    """성과관리 크롤링 컴포넌트"""
+    st.subheader("📈 성과관리 크롤링")
+    st.markdown("프로젝트별 성과를 확인하고 인플루언서의 성과를 관리합니다.")
+    
+    # 프로젝트 선택
+    projects = db_manager.get_projects()
+    
+    if not projects:
+        st.info("먼저 프로젝트를 생성해주세요.")
+        return
+    
+    project_options = {f"{p['project_name']} ({p['project_type']})": p['id'] for p in projects}
+    selected_project_id = st.selectbox(
+        "프로젝트 선택",
+        options=list(project_options.keys()),
+        key="performance_crawl_project_select",
+        help="성과를 확인할 프로젝트를 선택하세요"
+    )
+    
+    if not selected_project_id:
+        st.warning("프로젝트를 선택해주세요.")
+        return
+    
+    project_id = project_options[selected_project_id]
+    selected_project = next(p for p in projects if p['id'] == project_id)
+    
+    st.subheader(f"📊 {selected_project['project_name']} 성과 현황")
+    
+    # 프로젝트 기본 정보
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("프로젝트 유형", selected_project['project_type'])
+    with col2:
+        st.metric("상태", selected_project['status'])
+    with col3:
+        st.metric("생성일", selected_project['created_at'][:10] if selected_project['created_at'] else "N/A")
+    
+    # 프로젝트에 할당된 인플루언서 목록
+    project_influencers = db_manager.get_project_influencers(project_id)
+    
+    if not project_influencers:
+        st.info("이 프로젝트에 할당된 인플루언서가 없습니다.")
+        return
+    
+    st.subheader("👥 할당된 인플루언서 성과")
+    
+    for i, pi in enumerate(project_influencers):
+        with st.container():
+            col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
+            
+            with col1:
+                st.markdown(f"**{pi.get('influencer_name') or pi['sns_id']}**")
+                st.caption(f"플랫폼: {pi['platform']} | 상태: {pi['status']}")
+            
+            with col2:
+                if st.button("성과 크롤링", key=f"crawl_{pi['id']}_{i}"):
+                    st.session_state.crawling_influencer = pi
+                    st.rerun()
+            
+            with col3:
+                if st.button("성과 입력", key=f"input_{pi['id']}_{i}"):
+                    st.session_state.inputting_performance = pi
+                    st.rerun()
+            
+            with col4:
+                if st.button("상세보기", key=f"detail_{pi['id']}_{i}"):
+                    st.session_state.viewing_performance = pi
+                    st.rerun()
+            
+            # 성과 지표 표시
+            metrics = db_manager.get_performance_metrics(project_id, pi['influencer_id'])
+            if metrics:
+                metric_cols = st.columns(len(metrics))
+                for i, metric in enumerate(metrics):
+                    with metric_cols[i]:
+                        st.metric(
+                            metric['metric_type'].title(),
+                            f"{metric['metric_value']:,}",
+                            help=f"측정일: {metric['measurement_date'][:10] if metric['measurement_date'] else 'N/A'}"
+                        )
+            
+            st.divider()
+    
+    # 성과 크롤링 모달
+    if 'crawling_influencer' in st.session_state:
+        render_performance_crawling_modal()
+    
+    # 성과 입력 모달
+    if 'inputting_performance' in st.session_state:
+        render_performance_input_modal()
+    
+    # 성과 상세보기 모달
+    if 'viewing_performance' in st.session_state:
+        render_performance_detail_modal()
 
 def render_performance_management():
     """성과 관리 컴포넌트"""
