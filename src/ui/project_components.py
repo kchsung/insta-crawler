@@ -4,7 +4,7 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
 from ..instagram_crawler import InstagramCrawler
 from ..db.database import db_manager
-from ..db.models import Project, Influencer, ProjectInfluencer, PerformanceMetric, InstagramCrawlResult
+from ..db.models import Campaign, Influencer, CampaignInfluencer, CampaignInfluencerParticipation, PerformanceMetric, InstagramCrawlResult
 from ..supabase.auth import supabase_auth
 
 def check_database_for_influencer(platform: str, sns_id: str) -> Dict[str, Any]:
@@ -748,105 +748,854 @@ def render_batch_url_crawl():
             error_display.columns = ['인플루언서명', '플랫폼', 'SNS ID', '오류 메시지']
             st.dataframe(error_display, use_container_width=True)
 
-def render_project_management():
-    """프로젝트 관리 컴포넌트"""
-    st.subheader("📋 프로젝트 관리")
-    st.markdown("시딩, 홍보, 판매 프로젝트를 생성하고 인플루언서를 관리합니다.")
+def render_campaign_management():
+    """캠페인 관리 컴포넌트"""
+    st.subheader("📋 캠페인 관리")
+    st.markdown("시딩, 홍보, 판매 캠페인을 생성하고 참여 인플루언서를 관리합니다.")
     
-    # 탭으로 프로젝트 관리와 인플루언서 관리 구분
-    tab1, tab2 = st.tabs(["📁 프로젝트 관리", "👥 인플루언서 관리"])
+    # 탭으로 캠페인 관리와 참여 인플루언서 관리 구분
+    tab1, tab2 = st.tabs(["📁 캠페인 관리", "👥 참여 인플루언서 관리"])
     
     with tab1:
-        render_project_tab()
+        render_campaign_tab()
     
     with tab2:
-        render_influencer_tab()
+        render_campaign_participation_tab()
 
-def render_project_tab():
-    """프로젝트 탭"""
-    st.subheader("📁 프로젝트 관리")
+def render_campaign_tab():
+    """캠페인 탭"""
+    st.subheader("📁 캠페인 관리")
     
-    # 새 프로젝트 생성
-    with st.expander("➕ 새 프로젝트 생성", expanded=True):
-        with st.form("create_project_form"):
+    # 새 캠페인 생성
+    with st.expander("➕ 새 캠페인 생성", expanded=True):
+        with st.form("create_campaign_form"):
             col1, col2 = st.columns(2)
             
             with col1:
-                project_name = st.text_input("프로젝트 이름", placeholder="예: 2024 봄 시즌 시딩")
-                project_type = st.selectbox(
-                    "프로젝트 유형",
+                campaign_name = st.text_input("캠페인 이름", placeholder="예: 2024 봄 시즌 시딩")
+                campaign_type = st.selectbox(
+                    "캠페인 유형",
                     ["seeding", "promotion", "sales"],
-                    key="create_project_type",
+                    key="create_campaign_type",
                     format_func=lambda x: {
                         "seeding": "🌱 시딩",
                         "promotion": "📢 홍보", 
                         "sales": "💰 판매"
                     }[x]
                 )
+                start_date = st.date_input("캠페인 시작날짜", value=datetime.now().date())
             
             with col2:
-                description = st.text_area("프로젝트 설명", placeholder="프로젝트에 대한 상세 설명을 입력하세요")
+                campaign_description = st.text_area("캠페인 설명", placeholder="캠페인에 대한 상세 설명을 입력하세요")
                 status = st.selectbox(
-                    "상태",
-                    ["active", "completed", "cancelled"],
-                    key="create_project_status",
+                    "캠페인 상태",
+                    ["planned", "active", "paused", "completed", "canceled"],
+                    key="create_campaign_status",
                     format_func=lambda x: {
+                        "planned": "📅 계획됨",
                         "active": "🟢 진행중",
+                        "paused": "⏸️ 일시정지",
                         "completed": "✅ 완료",
-                        "cancelled": "❌ 취소"
+                        "canceled": "❌ 취소"
                     }[x]
                 )
+                end_date = st.date_input("캠페인 종료일", value=None)
             
-            if st.form_submit_button("프로젝트 생성", type="primary"):
-                if not project_name:
-                    st.error("프로젝트 이름을 입력해주세요.")
+            # 추가 필드들
+            campaign_instructions = st.text_area("캠페인 지시사항", placeholder="인플루언서에게 전달할 구체적인 지시사항을 입력하세요")
+            
+            # 태그 입력
+            tags_input = st.text_input("태그", placeholder="태그를 쉼표로 구분하여 입력하세요 (예: 봄시즌, 뷰티, 신제품)")
+            tags = [tag.strip() for tag in tags_input.split(",") if tag.strip()] if tags_input else None
+            
+            if st.form_submit_button("캠페인 생성", type="primary"):
+                if not campaign_name:
+                    st.error("캠페인 이름을 입력해주세요.")
+                elif not start_date:
+                    st.error("캠페인 시작날짜를 선택해주세요.")
+                elif end_date and end_date < start_date:
+                    st.error("종료일은 시작일보다 늦어야 합니다.")
                 else:
-                    project = Project(
-                        project_name=project_name,
-                        project_type=project_type,
-                        description=description,
-                        status=status
+                    campaign = Campaign(
+                        campaign_name=campaign_name,
+                        campaign_description=campaign_description,
+                        campaign_type=campaign_type,
+                        start_date=start_date,
+                        end_date=end_date,
+                        status=status,
+                        campaign_instructions=campaign_instructions,
+                        tags=tags
                     )
                     
-                    result = db_manager.create_project(project)
+                    result = db_manager.create_campaign(campaign)
                     if result["success"]:
-                        st.success("프로젝트가 생성되었습니다!")
+                        st.success("캠페인이 생성되었습니다!")
                         st.rerun()
                     else:
-                        st.error(f"프로젝트 생성 실패: {result['message']}")
+                        st.error(f"캠페인 생성 실패: {result['message']}")
     
-    # 기존 프로젝트 목록
-    st.subheader("📋 프로젝트 목록")
-    projects = db_manager.get_projects()
+    # 기존 캠페인 목록
+    st.subheader("📋 캠페인 목록")
     
-    if projects:
-        for i, project in enumerate(projects):
+    # 캠페인 목록
+    
+    # 필터링 옵션
+    st.markdown("### 🔍 필터링 옵션")
+    filter_col1, filter_col2, filter_col3 = st.columns([2, 2, 1])
+    
+    with filter_col1:
+        # 캠페인 유형 필터
+        campaign_type_filter = st.selectbox(
+            "캠페인 유형",
+            options=["전체", "seeding", "promotion", "sales"],
+            index=0 if "campaign_type_filter" not in st.session_state else ["전체", "seeding", "promotion", "sales"].index(st.session_state.get("campaign_type_filter", "전체")),
+            key="campaign_type_filter",
+            help="캠페인 유형으로 필터링합니다"
+        )
+    
+    with filter_col2:
+        # 캠페인 상태 필터
+        campaign_status_filter = st.selectbox(
+            "캠페인 상태",
+            options=["전체", "planned", "active", "paused", "completed", "canceled"],
+            index=0 if "campaign_status_filter" not in st.session_state else ["전체", "planned", "active", "paused", "completed", "canceled"].index(st.session_state.get("campaign_status_filter", "전체")),
+            key="campaign_status_filter",
+            help="캠페인 상태로 필터링합니다"
+        )
+    
+    with filter_col3:
+        st.markdown("")  # 공간 확보
+        st.markdown("")  # 공간 확보
+        if st.button("🔄 새로고침", key="refresh_campaigns", help="캠페인 목록을 새로 불러옵니다"):
+            st.rerun()
+    
+    # 모든 캠페인 조회 (생성자와 상관없이)
+    campaigns = db_manager.get_campaigns()
+    
+    # 필터링 적용
+    filtered_campaigns = campaigns
+    if campaign_type_filter != "전체":
+        filtered_campaigns = [c for c in filtered_campaigns if c['campaign_type'] == campaign_type_filter]
+    
+    if campaign_status_filter != "전체":
+        filtered_campaigns = [c for c in filtered_campaigns if c['status'] == campaign_status_filter]
+    
+    if filtered_campaigns:
+        # 필터링 결과 표시
+        if len(filtered_campaigns) != len(campaigns):
+            st.info(f"🔍 필터링 결과: {len(filtered_campaigns)}개 (전체 {len(campaigns)}개 중)")
+        else:
+            st.success(f"✅ {len(filtered_campaigns)}개의 캠페인을 찾았습니다.")
+        
+        for i, campaign in enumerate(filtered_campaigns):
             with st.container():
                 col1, col2, col3 = st.columns([3, 1, 1])
                 
                 with col1:
-                    st.markdown(f"**{project['project_name']}**")
-                    st.caption(f"유형: {project['project_type']} | 상태: {project['status']}")
-                    if project['description']:
-                        st.caption(project['description'])
+                    st.markdown(f"**{campaign['campaign_name']}**")
+                    st.caption(f"유형: {campaign['campaign_type']} | 상태: {campaign['status']}")
+                    st.caption(f"기간: {campaign['start_date']} ~ {campaign['end_date'] or '미정'}")
+                    if campaign['campaign_description']:
+                        st.caption(campaign['campaign_description'])
+                    if campaign.get('campaign_instructions'):
+                        st.caption(f"📋 지시사항: {campaign['campaign_instructions']}")
+                    if campaign.get('tags') and len(campaign['tags']) > 0:
+                        tags_display = ", ".join(campaign['tags'])
+                        st.caption(f"🏷️ 태그: {tags_display}")
                 
                 with col2:
-                    if st.button("인플루언서 관리", key=f"manage_{project['id']}_{i}"):
-                        st.session_state.selected_project = project
+                    if st.button("✏️ 수정", key=f"edit_{campaign['id']}_{i}", help="캠페인 정보를 수정합니다"):
+                        st.session_state[f"editing_campaign_{campaign['id']}"] = True
                         st.rerun()
                 
                 with col3:
-                    if st.button("삭제", key=f"delete_{project['id']}_{i}"):
-                        result = db_manager.delete_project(project['id'])
+                    if st.button("🗑️ 삭제", key=f"delete_{campaign['id']}_{i}", help="캠페인을 삭제합니다"):
+                        result = db_manager.delete_campaign(campaign['id'])
                         if result["success"]:
-                            st.success("프로젝트가 삭제되었습니다!")
+                            st.success("캠페인이 삭제되었습니다!")
                             st.rerun()
                         else:
                             st.error(f"삭제 실패: {result['message']}")
                 
                 st.divider()
+                
+                # 캠페인 수정 폼 (수정 버튼이 클릭된 경우)
+                if st.session_state.get(f"editing_campaign_{campaign['id']}", False):
+                    render_campaign_edit_form(campaign)
     else:
-        st.info("생성된 프로젝트가 없습니다.")
+        if campaigns:
+            st.warning("🔍 선택한 필터 조건에 맞는 캠페인이 없습니다.")
+        else:
+            st.info("생성된 캠페인이 없습니다.")
+
+def render_campaign_edit_form(campaign):
+    """캠페인 수정 폼"""
+    st.markdown("---")
+    st.subheader(f"✏️ 캠페인 수정: {campaign['campaign_name']}")
+    
+    with st.form(f"edit_campaign_form_{campaign['id']}"):
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # 기존 값으로 폼 초기화
+            campaign_name = st.text_input(
+                "캠페인 이름", 
+                value=campaign['campaign_name'],
+                key=f"edit_name_{campaign['id']}"
+            )
+            
+            campaign_type = st.selectbox(
+                "캠페인 유형",
+                ["seeding", "promotion", "sales"],
+                index=["seeding", "promotion", "sales"].index(campaign['campaign_type']),
+                key=f"edit_type_{campaign['id']}",
+                format_func=lambda x: {
+                    "seeding": "🌱 시딩",
+                    "promotion": "📢 홍보", 
+                    "sales": "💰 판매"
+                }[x]
+            )
+            
+            # 날짜 변환
+            start_date = st.date_input(
+                "캠페인 시작날짜", 
+                value=datetime.strptime(campaign['start_date'], '%Y-%m-%d').date(),
+                key=f"edit_start_{campaign['id']}"
+            )
+        
+        with col2:
+            campaign_description = st.text_area(
+                "캠페인 설명", 
+                value=campaign.get('campaign_description', ''),
+                key=f"edit_desc_{campaign['id']}"
+            )
+            
+            status = st.selectbox(
+                "캠페인 상태",
+                ["planned", "active", "paused", "completed", "canceled"],
+                index=["planned", "active", "paused", "completed", "canceled"].index(campaign['status']),
+                key=f"edit_status_{campaign['id']}",
+                format_func=lambda x: {
+                    "planned": "📅 계획됨",
+                    "active": "🟢 진행중",
+                    "paused": "⏸️ 일시정지",
+                    "completed": "✅ 완료",
+                    "canceled": "❌ 취소"
+                }[x]
+            )
+            
+            # 종료일 처리
+            end_date_value = None
+            if campaign.get('end_date'):
+                end_date_value = datetime.strptime(campaign['end_date'], '%Y-%m-%d').date()
+            
+            end_date = st.date_input(
+                "캠페인 종료일", 
+                value=end_date_value,
+                key=f"edit_end_{campaign['id']}"
+            )
+        
+        # 추가 필드들
+        campaign_instructions = st.text_area(
+            "캠페인 지시사항", 
+            value=campaign.get('campaign_instructions', ''),
+            key=f"edit_instructions_{campaign['id']}"
+        )
+        
+        # 태그 처리
+        tags_input = st.text_input(
+            "태그", 
+            value=", ".join(campaign.get('tags', [])) if campaign.get('tags') else "",
+            key=f"edit_tags_{campaign['id']}",
+            placeholder="태그를 쉼표로 구분하여 입력하세요 (예: 봄시즌, 뷰티, 신제품)"
+        )
+        tags = [tag.strip() for tag in tags_input.split(",") if tag.strip()] if tags_input else None
+        
+        # 버튼들
+        col1, col2, col3 = st.columns([1, 1, 2])
+        
+        with col1:
+            if st.form_submit_button("💾 수정하기", type="primary"):
+                if not campaign_name:
+                    st.error("캠페인 이름을 입력해주세요.")
+                elif not start_date:
+                    st.error("캠페인 시작날짜를 선택해주세요.")
+                elif end_date and end_date < start_date:
+                    st.error("종료일은 시작일보다 늦어야 합니다.")
+                else:
+                    # 캠페인 데이터 준비
+                    update_data = {
+                        "campaign_name": campaign_name,
+                        "campaign_description": campaign_description,
+                        "campaign_type": campaign_type,
+                        "start_date": start_date.strftime('%Y-%m-%d'),
+                        "end_date": end_date.strftime('%Y-%m-%d') if end_date else None,
+                        "status": status,
+                        "campaign_instructions": campaign_instructions,
+                        "tags": tags
+                    }
+                    
+                    result = db_manager.update_campaign(campaign['id'], update_data)
+                    if result["success"]:
+                        st.success("캠페인이 수정되었습니다!")
+                        # 수정 모드 종료
+                        st.session_state[f"editing_campaign_{campaign['id']}"] = False
+                        st.rerun()
+                    else:
+                        st.error(f"캠페인 수정 실패: {result['message']}")
+        
+        with col2:
+            if st.form_submit_button("❌ 취소"):
+                # 수정 모드 종료
+                st.session_state[f"editing_campaign_{campaign['id']}"] = False
+                st.rerun()
+    
+    st.markdown("---")
+
+def render_add_influencer_workflow(campaign_id):
+    """인플루언서 추가 워크플로우 (검색 → 정보 확인 → 추가)"""
+    st.subheader("➕ 인플루언서 추가")
+    
+    # 1단계: 인플루언서 검색 (별도 폼)
+    st.markdown("### 1️⃣ 인플루언서 검색")
+    with st.form("search_influencer_form"):
+        col1, col2 = st.columns([1, 1])
+        
+        with col1:
+            platform = st.selectbox(
+                "플랫폼",
+                ["instagram", "youtube", "tiktok", "twitter"],
+                key="search_platform",
+                format_func=lambda x: {
+                    "instagram": "📸 Instagram",
+                    "youtube": "📺 YouTube",
+                    "tiktok": "🎵 TikTok",
+                    "twitter": "🐦 Twitter"
+                }[x]
+            )
+        
+        with col2:
+            sns_id = st.text_input("SNS ID", placeholder="@username 또는 username", key="search_sns_id")
+        
+        search_clicked = st.form_submit_button("🔍 인플루언서 검색", type="primary")
+    
+    # 검색 결과 처리
+    selected_influencer = None
+    if search_clicked:
+        if not sns_id:
+            st.error("SNS ID를 입력해주세요.")
+        else:
+            # SNS ID에서 @ 제거
+            clean_sns_id = sns_id.replace('@', '')
+            
+            # 인플루언서 검색
+            influencer_info = db_manager.get_influencer_info(platform, clean_sns_id)
+            
+            if influencer_info["success"] and influencer_info["exists"]:
+                selected_influencer = influencer_info["data"]
+                st.session_state["selected_influencer_for_campaign"] = selected_influencer
+                st.success("인플루언서를 찾았습니다!")
+                st.rerun()
+            else:
+                st.error("해당 인플루언서를 찾을 수 없습니다. 먼저 인플루언서를 등록해주세요.")
+    
+    # 세션에서 선택된 인플루언서 가져오기
+    if "selected_influencer_for_campaign" in st.session_state:
+        selected_influencer = st.session_state["selected_influencer_for_campaign"]
+    
+    # 2단계: 검색된 인플루언서 정보 표시
+    if selected_influencer:
+        st.markdown("### 2️⃣ 인플루언서 정보 확인")
+        render_influencer_info_inline(selected_influencer)
+        
+        # 3단계: 담당자 의견 및 비용 입력 (별도 폼)
+        st.markdown("### 3️⃣ 담당자 의견 및 비용 입력")
+        with st.form("add_influencer_form"):
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                manager_comment = st.text_area(
+                    "담당자 의견", 
+                    placeholder="인플루언서에 대한 담당자 메모나 지시사항을 입력하세요",
+                    key="manager_comment_input"
+                )
+                
+                influencer_requests = st.text_area(
+                    "인플루언서 요청사항", 
+                    placeholder="인플루언서에게 전달할 요청사항을 입력하세요",
+                    key="influencer_requests_input"
+                )
+            
+            with col2:
+                cost_krw = st.number_input(
+                    "비용 (원)", 
+                    min_value=0, 
+                    value=0, 
+                    step=1000,
+                    key="cost_input",
+                    help="인플루언서에게 지급할 비용을 입력하세요"
+                )
+                
+                sample_status = st.selectbox(
+                    "샘플 상태",
+                    ["요청", "발송준비", "발송완료", "수령"],
+                    key="sample_status_input",
+                    help="샘플 발송 상태를 선택하세요"
+                )
+                
+                memo = st.text_area(
+                    "메모", 
+                    placeholder="추가 메모사항을 입력하세요",
+                    key="memo_input"
+                )
+            
+            # 버튼들
+            col1, col2 = st.columns([1, 1])
+            
+            with col1:
+                if st.form_submit_button("✅ 인플루언서 추가", type="primary"):
+                    # 디버깅 정보
+                    st.write("🔍 디버깅 정보:")
+                    st.write(f"- Campaign ID: {campaign_id}")
+                    st.write(f"- Influencer ID: {selected_influencer['id']}")
+                    st.write(f"- Manager Comment: {manager_comment}")
+                    st.write(f"- Cost: {cost_krw}")
+                    
+                    # 참여 데이터 생성
+                    participation = CampaignInfluencerParticipation(
+                        campaign_id=campaign_id,
+                        influencer_id=selected_influencer["id"],
+                        manager_comment=manager_comment,
+                        influencer_requests=influencer_requests,
+                        memo=memo,
+                        sample_status=sample_status,
+                        cost_krw=cost_krw
+                    )
+                    
+                    st.write("📝 Participation 객체 생성 완료")
+                    
+                    result = db_manager.add_influencer_to_campaign(participation)
+                    
+                    st.write(f"📊 DB 결과: {result}")
+                    
+                    if result["success"]:
+                        st.success("인플루언서가 캠페인에 추가되었습니다!")
+                        # 세션 정리
+                        if "selected_influencer_for_campaign" in st.session_state:
+                            del st.session_state["selected_influencer_for_campaign"]
+                        st.rerun()
+                    else:
+                        st.error(f"추가 실패: {result['message']}")
+            
+            with col2:
+                if st.form_submit_button("❌ 취소"):
+                    # 세션 정리
+                    if "selected_influencer_for_campaign" in st.session_state:
+                        del st.session_state["selected_influencer_for_campaign"]
+                    st.rerun()
+
+def render_influencer_info_inline(influencer):
+    """인라인 인플루언서 정보 표시 (폼 내에서 사용)"""
+    # 정보 카드 형태로 표시
+    col1, col2 = st.columns([1, 2])
+    
+    with col1:
+        # 프로필 이미지 (가운데 정렬)
+        profile_image_url = influencer.get('profile_image_url')
+        if profile_image_url and profile_image_url.strip():
+            try:
+                # CSS를 사용하여 이미지 가운데 정렬
+                st.markdown("""
+                <div style="display: flex; justify-content: center; align-items: center; margin-bottom: 10px;">
+                    <img src="{}" style="width: 150px; height: 150px; object-fit: cover; border-radius: 50%; border: 2px solid #e0e0e0;">
+                </div>
+                """.format(profile_image_url), unsafe_allow_html=True)
+                st.markdown("<div style='text-align: center; font-size: 0.8em; color: #666;'>프로필 이미지</div>", unsafe_allow_html=True)
+            except Exception as e:
+                st.warning(f"프로필 이미지를 불러올 수 없습니다: {profile_image_url}")
+        else:
+            # 프로필 이미지가 없을 때도 가운데 정렬
+            st.markdown("""
+            <div style="display: flex; justify-content: center; align-items: center; margin-bottom: 10px;">
+                <div style="width: 150px; height: 150px; background-color: #f0f0f0; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid #e0e0e0;">
+                    <span style="color: #999; font-size: 0.9em;">이미지 없음</span>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+            st.markdown("<div style='text-align: center; font-size: 0.8em; color: #666;'>프로필 이미지</div>", unsafe_allow_html=True)
+    
+    with col2:
+        st.markdown(f"**📱 SNS ID:** `{influencer['sns_id']}`")
+        st.markdown(f"**👤 인플루언서 이름:** {influencer.get('influencer_name', 'N/A')}")
+        st.markdown(f"**🌐 SNS URL:** {influencer.get('sns_url', 'N/A')}")
+        st.markdown(f"**👥 팔로워 수:** {influencer.get('followers_count', 0):,}")
+        st.markdown(f"**💬 카카오 채널 ID:** {influencer.get('kakao_channel_id', 'N/A')}")
+        
+        # 프로필 텍스트 (멀티라인으로 표시)
+        profile_text = influencer.get('profile_text')
+        if profile_text and profile_text.strip():
+            st.markdown("**📝 프로필 텍스트:**")
+            # 텍스트 영역으로 표시하여 멀티라인 지원
+            st.text_area(
+                "프로필 텍스트 내용",
+                value=profile_text,
+                height=100,
+                disabled=True,
+                key=f"profile_text_{influencer['sns_id']}",
+                label_visibility="collapsed"
+            )
+
+
+def render_campaign_participation_tab():
+    """캠페인 참여 인플루언서 관리 탭"""
+    st.subheader("👥 참여 인플루언서 관리")
+    st.markdown("캠페인별로 참여 인플루언서를 관리합니다.")
+    
+    # 캠페인 목록 새로고침 버튼
+    col1, col2 = st.columns([1, 4])
+    with col1:
+        if st.button("🔄 캠페인 목록 새로고침", key="refresh_campaigns_participation", help="캠페인 목록을 새로 불러옵니다"):
+            st.rerun()
+    
+    with col2:
+        st.caption("캠페인 목록을 새로고침하려면 새로고침 버튼을 클릭하세요.")
+    
+    # 캠페인 선택 (모든 캠페인 조회)
+    campaigns = db_manager.get_campaigns()
+    
+    if not campaigns:
+        st.info("먼저 캠페인을 생성해주세요.")
+        return
+    
+    campaign_options = {f"{c['campaign_name']} ({c['campaign_type']})": c['id'] for c in campaigns}
+    selected_campaign_id = st.selectbox(
+        "캠페인 선택",
+        options=list(campaign_options.keys()),
+        key="participation_campaign_select",
+        help="참여 인플루언서를 관리할 캠페인을 선택하세요"
+    )
+    
+    if not selected_campaign_id:
+        st.warning("캠페인을 선택해주세요.")
+        return
+    
+    campaign_id = campaign_options[selected_campaign_id]
+    selected_campaign = next(c for c in campaigns if c['id'] == campaign_id)
+    
+    st.subheader(f"📊 {selected_campaign['campaign_name']} 참여 인플루언서")
+    
+    # 인플루언서 추가 섹션 (새로운 워크플로우)
+    render_add_influencer_workflow(campaign_id)
+    
+    # 참여 인플루언서 목록
+    st.subheader("📋 참여 인플루언서 목록")
+    
+    # 참여 인플루언서 목록 컴팩트 스타일
+    st.markdown("""
+    <style>
+    /* 참여 인플루언서 목록 컴팩트 스타일 */
+    div[data-testid="column"] .stButton > button {
+        height: 1.5rem !important;
+        min-height: 1.5rem !important;
+        width: 100% !important;
+        font-size: 0.75rem !important;
+        padding: 0.1rem 0.3rem !important;
+        margin: 0.1rem 0 !important;
+    }
+    
+    /* 리스트 아이템 간격 줄이기 */
+    .stContainer {
+        margin: 0.1rem 0 !important;
+        padding: 0.2rem 0 !important;
+    }
+    
+    /* 텍스트 크기 줄이기 */
+    .stMarkdown {
+        margin: 0.05rem 0 !important;
+        line-height: 1.2 !important;
+    }
+    
+    /* 캡션 텍스트 크기 줄이기 */
+    .stCaption {
+        font-size: 0.7rem !important;
+        margin: 0.02rem 0 !important;
+        line-height: 1.1 !important;
+    }
+    
+    /* 제목 텍스트 크기 조정 */
+    .stMarkdown h3 {
+        margin: 0.1rem 0 !important;
+        font-size: 1rem !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    participations = db_manager.get_campaign_participations(campaign_id)
+    
+    if participations:
+        # 페이지네이션을 위한 설정
+        items_per_page = 20
+        total_pages = (len(participations) - 1) // items_per_page + 1
+        
+        # 페이지 선택
+        if total_pages > 1:
+            page = st.selectbox("페이지 선택", range(1, total_pages + 1), key="participation_page") - 1
+            start_idx = page * items_per_page
+            end_idx = min(start_idx + items_per_page, len(participations))
+            page_participations = participations[start_idx:end_idx]
+            st.caption(f"페이지 {page + 1}/{total_pages} (총 {len(participations)}명)")
+        else:
+            page_participations = participations
+        
+        for i, participation in enumerate(page_participations):
+            with st.container():
+                col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
+                
+                with col1:
+                    # 모든 필드 정보 표시 (컴팩트하게)
+                    st.markdown(f"**{participation.get('influencer_name') or participation['sns_id']}**")
+                    st.caption(f"📱 SNS ID: {participation['sns_id']} | 👥 팔로워: {participation.get('followers_count', 0):,}명")
+                    st.caption(f"🌐 플랫폼: {participation['platform']} | 📦 샘플상태: {participation['sample_status']}")
+                    st.caption(f"💰 비용: {participation['cost_krw']:,}원 | 📤 업로드: {'✅' if participation['content_uploaded'] else '❌'}")
+                    
+                    # 컨텐츠 링크 표시 (첫 번째 링크만)
+                    content_links = participation.get('content_links', [])
+                    if content_links and len(content_links) > 0:
+                        first_link = content_links[0]
+                        link_count = len(content_links)
+                        if link_count > 1:
+                            st.caption(f"🔗 컨텐츠 링크: {first_link} (+{link_count-1}개 더)")
+                        else:
+                            st.caption(f"🔗 컨텐츠 링크: {first_link}")
+                    
+                    if participation['manager_comment']:
+                        st.caption(f"💬 담당자 의견: {participation['manager_comment']}")
+                    if participation['influencer_requests']:
+                        st.caption(f"📋 요청사항: {participation['influencer_requests']}")
+                    if participation['memo']:
+                        st.caption(f"📝 메모: {participation['memo']}")
+                    if participation['influencer_feedback']:
+                        st.caption(f"💭 피드백: {participation['influencer_feedback']}")
+                
+                with col2:
+                    if st.button("상세보기", key=f"detail_participation_{participation['id']}_{i}"):
+                        st.session_state.viewing_participation = participation
+                        st.rerun()
+                
+                with col3:
+                    if st.button("수정", key=f"edit_participation_{participation['id']}_{i}"):
+                        st.session_state.editing_participation = participation
+                        st.rerun()
+                
+                with col4:
+                    if st.button("제거", key=f"remove_participation_{participation['id']}_{i}"):
+                        result = db_manager.remove_influencer_from_campaign(participation['id'])
+                        if result["success"]:
+                            st.success("인플루언서가 제거되었습니다!")
+                            st.rerun()
+                        else:
+                            st.error(f"제거 실패: {result['message']}")
+                
+                # 구분선을 더 얇게
+                st.markdown("---")
+    else:
+        st.info("이 캠페인에 참여한 인플루언서가 없습니다.")
+    
+    # 참여 상세보기 모달
+    if 'viewing_participation' in st.session_state:
+        render_participation_detail_modal()
+    
+    # 참여 수정 모달
+    if 'editing_participation' in st.session_state:
+        render_participation_edit_modal()
+
+def render_participation_detail_modal():
+    """참여 상세보기 모달"""
+    participation = st.session_state.viewing_participation
+    
+    with st.expander("📋 참여 상세 정보", expanded=True):
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown(f"**인플루언서:** {participation.get('influencer_name') or participation['sns_id']}")
+            st.markdown(f"**플랫폼:** {participation['platform']}")
+            st.markdown(f"**SNS ID:** {participation['sns_id']}")
+            st.markdown(f"**팔로워 수:** {participation.get('followers_count', 0):,}")
+            st.markdown(f"**게시물 수:** {participation.get('post_count', 0):,}")
+        
+        with col2:
+            st.markdown(f"**샘플 상태:** {participation['sample_status']}")
+            st.markdown(f"**비용:** {participation['cost_krw']:,}원")
+            st.markdown(f"**업로드 완료:** {'✅' if participation['content_uploaded'] else '❌'}")
+            st.markdown(f"**참여일:** {participation['created_at'][:10] if participation['created_at'] else 'N/A'}")
+        
+        if participation['manager_comment']:
+            st.markdown("**담당자 의견:**")
+            st.info(participation['manager_comment'])
+        
+        if participation['influencer_requests']:
+            st.markdown("**인플루언서 요청사항:**")
+            st.info(participation['influencer_requests'])
+        
+        if participation['influencer_feedback']:
+            st.markdown("**인플루언서 피드백:**")
+            st.info(participation['influencer_feedback'])
+        
+        if participation['memo']:
+            st.markdown("**메모:**")
+            st.info(participation['memo'])
+        
+        content_links = participation.get('content_links', [])
+        if content_links and len(content_links) > 0:
+            st.markdown("**컨텐츠 링크:**")
+            first_link = content_links[0]
+            link_count = len(content_links)
+            if link_count > 1:
+                st.markdown(f"- {first_link}")
+                st.caption(f"총 {link_count}개의 링크가 있습니다. (첫 번째 링크만 표시)")
+            else:
+                st.markdown(f"- {first_link}")
+        
+        if st.button("닫기", key="close_participation_detail"):
+            del st.session_state.viewing_participation
+            st.rerun()
+
+def render_participation_edit_modal():
+    """참여 수정 모달"""
+    participation = st.session_state.editing_participation
+    
+    with st.expander("✏️ 참여 정보 수정", expanded=True):
+        with st.form("edit_participation_form"):
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                sample_status = st.selectbox(
+                    "샘플 상태",
+                    ["요청", "발송준비", "발송완료", "수령"],
+                    index=["요청", "발송준비", "발송완료", "수령"].index(participation['sample_status']),
+                    key="edit_sample_status"
+                )
+                cost_krw = st.number_input(
+                    "비용 (원)",
+                    min_value=0,
+                    value=int(participation['cost_krw']),
+                    key="edit_cost_krw"
+                )
+                content_uploaded = st.checkbox(
+                    "컨텐츠 업로드 완료",
+                    value=participation['content_uploaded'],
+                    key="edit_content_uploaded"
+                )
+            
+            with col2:
+                manager_comment = st.text_area(
+                    "담당자 의견",
+                    value=participation['manager_comment'] or "",
+                    key="edit_manager_comment"
+                )
+                influencer_requests = st.text_area(
+                    "인플루언서 요청사항",
+                    value=participation['influencer_requests'] or "",
+                    key="edit_influencer_requests"
+                )
+                memo = st.text_area(
+                    "메모",
+                    value=participation['memo'] or "",
+                    key="edit_memo"
+                )
+            
+            influencer_feedback = st.text_area(
+                "인플루언서 피드백",
+                value=participation['influencer_feedback'] or "",
+                key="edit_influencer_feedback"
+            )
+            
+            # 컨텐츠 링크 관리
+            st.markdown("**컨텐츠 링크:**")
+            
+            # 버튼 정렬을 위한 CSS
+            st.markdown("""
+            <style>
+            .stButton > button {
+                height: 2.5rem !important;
+                min-height: 2.5rem !important;
+                align-self: flex-end !important;
+            }
+            .stColumns > div {
+                display: flex !important;
+                align-items: flex-end !important;
+            }
+            </style>
+            """, unsafe_allow_html=True)
+            
+            # 세션 상태에서 링크 관리
+            if f"content_links_{participation['id']}" not in st.session_state:
+                st.session_state[f"content_links_{participation['id']}"] = participation['content_links'] or []
+            
+            content_links = st.session_state[f"content_links_{participation['id']}"]
+            
+            # 기존 링크 표시
+            for i, link in enumerate(content_links):
+                col1, col2 = st.columns([4, 1])
+                with col1:
+                    st.text_input(f"링크 {i+1}", value=link, key=f"existing_link_{i}", disabled=True)
+                with col2:
+                    # 마이너스 버튼으로 삭제
+                    if st.form_submit_button("➖", key=f"delete_link_{i}", help="링크 삭제"):
+                        # 삭제할 링크를 None으로 표시
+                        content_links[i] = None
+                        # None 값 제거 (삭제된 링크들)
+                        content_links = [link for link in content_links if link is not None]
+                        st.session_state[f"content_links_{participation['id']}"] = content_links
+                        st.rerun()
+            
+            # None 값 제거 (삭제된 링크들)
+            content_links = [link for link in content_links if link is not None]
+            st.session_state[f"content_links_{participation['id']}"] = content_links
+            
+            # 새 링크 추가
+            col1, col2 = st.columns([4, 1])
+            with col1:
+                new_link = st.text_input("새 링크 추가", key="new_content_link", placeholder="https://...")
+            with col2:
+                if st.form_submit_button("➕", key="add_content_link", help="링크 추가"):
+                    if new_link and new_link.strip():
+                        content_links.append(new_link.strip())
+                        st.session_state[f"content_links_{participation['id']}"] = content_links
+                        st.rerun()
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.form_submit_button("수정 완료", type="primary"):
+                    updates = {
+                        "sample_status": sample_status,
+                        "cost_krw": cost_krw,
+                        "content_uploaded": content_uploaded,
+                        "manager_comment": manager_comment,
+                        "influencer_requests": influencer_requests,
+                        "memo": memo,
+                        "influencer_feedback": influencer_feedback,
+                        "content_links": content_links
+                    }
+                    
+                    result = db_manager.update_campaign_participation(participation['id'], updates)
+                    if result["success"]:
+                        st.success("참여 정보가 수정되었습니다!")
+                        # 세션 상태 정리
+                        del st.session_state.editing_participation
+                        if f"content_links_{participation['id']}" in st.session_state:
+                            del st.session_state[f"content_links_{participation['id']}"]
+                        st.rerun()
+                    else:
+                        st.error(f"수정 실패: {result['message']}")
+            
+            with col2:
+                if st.form_submit_button("취소"):
+                    # 세션 상태 정리
+                    del st.session_state.editing_participation
+                    if f"content_links_{participation['id']}" in st.session_state:
+                        del st.session_state[f"content_links_{participation['id']}"]
+                    st.rerun()
 
 def render_influencer_tab():
     """인플루언서 탭"""
@@ -972,75 +1721,77 @@ def render_influencer_tab():
 def render_performance_crawl():
     """성과관리 크롤링 컴포넌트"""
     st.subheader("📈 성과관리 크롤링")
-    st.markdown("프로젝트별 성과를 확인하고 인플루언서의 성과를 관리합니다.")
+    st.markdown("캠페인별 성과를 확인하고 인플루언서의 성과를 관리합니다.")
     
-    # 프로젝트 선택
-    projects = db_manager.get_projects()
+    # 캠페인 선택
+    campaigns = db_manager.get_campaigns()
     
-    if not projects:
-        st.info("먼저 프로젝트를 생성해주세요.")
+    if not campaigns:
+        st.info("먼저 캠페인을 생성해주세요.")
         return
     
-    project_options = {f"{p['project_name']} ({p['project_type']})": p['id'] for p in projects}
-    selected_project_id = st.selectbox(
-        "프로젝트 선택",
-        options=list(project_options.keys()),
-        key="performance_crawl_project_select",
-        help="성과를 확인할 프로젝트를 선택하세요"
+    campaign_options = {f"{c['campaign_name']} ({c['campaign_type']})": c['id'] for c in campaigns}
+    selected_campaign_id = st.selectbox(
+        "캠페인 선택",
+        options=list(campaign_options.keys()),
+        key="performance_crawl_campaign_select",
+        help="성과를 확인할 캠페인을 선택하세요"
     )
     
-    if not selected_project_id:
-        st.warning("프로젝트를 선택해주세요.")
+    if not selected_campaign_id:
+        st.warning("캠페인을 선택해주세요.")
         return
     
-    project_id = project_options[selected_project_id]
-    selected_project = next(p for p in projects if p['id'] == project_id)
+    campaign_id = campaign_options[selected_campaign_id]
+    selected_campaign = next(c for c in campaigns if c['id'] == campaign_id)
     
-    st.subheader(f"📊 {selected_project['project_name']} 성과 현황")
+    st.subheader(f"📊 {selected_campaign['campaign_name']} 성과 현황")
     
-    # 프로젝트 기본 정보
-    col1, col2, col3 = st.columns(3)
+    # 캠페인 기본 정보
+    col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.metric("프로젝트 유형", selected_project['project_type'])
+        st.metric("캠페인 유형", selected_campaign['campaign_type'])
     with col2:
-        st.metric("상태", selected_project['status'])
+        st.metric("상태", selected_campaign['status'])
     with col3:
-        st.metric("생성일", selected_project['created_at'][:10] if selected_project['created_at'] else "N/A")
+        st.metric("시작일", selected_campaign['start_date'])
+    with col4:
+        st.metric("종료일", selected_campaign['end_date'] or "미정")
     
-    # 프로젝트에 할당된 인플루언서 목록
-    project_influencers = db_manager.get_project_influencers(project_id)
+    # 캠페인에 할당된 인플루언서 목록
+    campaign_influencers = db_manager.get_campaign_influencers(campaign_id)
     
-    if not project_influencers:
-        st.info("이 프로젝트에 할당된 인플루언서가 없습니다.")
+    if not campaign_influencers:
+        st.info("이 캠페인에 할당된 인플루언서가 없습니다.")
         return
     
     st.subheader("👥 할당된 인플루언서 성과")
     
-    for i, pi in enumerate(project_influencers):
+    for i, ci in enumerate(campaign_influencers):
         with st.container():
             col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
             
             with col1:
-                st.markdown(f"**{pi.get('influencer_name') or pi['sns_id']}**")
-                st.caption(f"플랫폼: {pi['platform']} | 상태: {pi['status']}")
+                st.markdown(f"**{ci.get('influencer_name') or ci['sns_id']}**")
+                st.caption(f"플랫폼: {ci['platform']} | 상태: {ci['status']}")
             
             with col2:
-                if st.button("성과 크롤링", key=f"crawl_{pi['id']}_{i}"):
-                    st.session_state.crawling_influencer = pi
+                if st.button("성과 크롤링", key=f"crawl_{ci['id']}_{i}"):
+                    st.session_state.crawling_influencer = ci
                     st.rerun()
             
             with col3:
-                if st.button("성과 입력", key=f"input_{pi['id']}_{i}"):
-                    st.session_state.inputting_performance = pi
+                if st.button("성과 입력", key=f"input_{ci['id']}_{i}"):
+                    st.session_state.inputting_performance = ci
                     st.rerun()
             
             with col4:
-                if st.button("상세보기", key=f"detail_{pi['id']}_{i}"):
-                    st.session_state.viewing_performance = pi
+                if st.button("상세보기", key=f"detail_{ci['id']}_{i}"):
+                    st.session_state.viewing_performance = ci
                     st.rerun()
             
             # 성과 지표 표시
-            metrics = db_manager.get_performance_metrics(project_id, pi['influencer_id'])
+            metrics = db_manager.get_performance_metrics(campaign_id, ci['influencer_id'])
             if metrics:
                 metric_cols = st.columns(len(metrics))
                 for i, metric in enumerate(metrics):
@@ -1068,79 +1819,91 @@ def render_performance_crawl():
 def render_performance_management():
     """성과 관리 컴포넌트"""
     st.subheader("📈 성과 관리")
-    st.markdown("프로젝트별 성과를 확인하고 인플루언서의 성과를 관리합니다.")
+    st.markdown("캠페인별 성과를 확인하고 인플루언서의 성과를 관리합니다.")
     
-    # 프로젝트 선택
-    projects = db_manager.get_projects()
+    # 캠페인 목록 새로고침 버튼
+    col1, col2 = st.columns([1, 4])
+    with col1:
+        if st.button("🔄 캠페인 목록 새로고침", key="refresh_campaigns_performance", help="캠페인 목록을 새로 불러옵니다"):
+            st.rerun()
     
-    if not projects:
-        st.info("먼저 프로젝트를 생성해주세요.")
+    with col2:
+        st.caption("캠페인 목록을 새로고침하려면 새로고침 버튼을 클릭하세요.")
+    
+    # 캠페인 선택 (모든 캠페인 조회)
+    campaigns = db_manager.get_campaigns()
+    
+    if not campaigns:
+        st.info("먼저 캠페인을 생성해주세요.")
         return
     
-    project_options = {f"{p['project_name']} ({p['project_type']})": p['id'] for p in projects}
-    selected_project_id = st.selectbox(
-        "프로젝트 선택",
-        options=list(project_options.keys()),
-        key="performance_project_select",
-        help="성과를 확인할 프로젝트를 선택하세요"
+    campaign_options = {f"{c['campaign_name']} ({c['campaign_type']})": c['id'] for c in campaigns}
+    selected_campaign_id = st.selectbox(
+        "캠페인 선택",
+        options=list(campaign_options.keys()),
+        key="performance_management_campaign_select",
+        help="성과를 확인할 캠페인을 선택하세요"
     )
     
-    if not selected_project_id:
-        st.warning("프로젝트를 선택해주세요.")
+    if not selected_campaign_id:
+        st.warning("캠페인을 선택해주세요.")
         return
     
-    project_id = project_options[selected_project_id]
-    selected_project = next(p for p in projects if p['id'] == project_id)
+    campaign_id = campaign_options[selected_campaign_id]
+    selected_campaign = next(c for c in campaigns if c['id'] == campaign_id)
     
-    st.subheader(f"📊 {selected_project['project_name']} 성과 현황")
+    st.subheader(f"📊 {selected_campaign['campaign_name']} 성과 현황")
     
-    # 프로젝트 기본 정보
-    col1, col2, col3 = st.columns(3)
+    # 캠페인 기본 정보
+    col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.metric("프로젝트 유형", selected_project['project_type'])
+        st.metric("캠페인 유형", selected_campaign['campaign_type'])
     with col2:
-        st.metric("상태", selected_project['status'])
+        st.metric("상태", selected_campaign['status'])
     with col3:
-        st.metric("생성일", selected_project['created_at'][:10] if selected_project['created_at'] else "N/A")
+        st.metric("시작일", selected_campaign['start_date'])
+    with col4:
+        st.metric("종료일", selected_campaign['end_date'] or "미정")
     
-    # 프로젝트에 할당된 인플루언서 목록
-    project_influencers = db_manager.get_project_influencers(project_id)
+    # 캠페인에 참여한 인플루언서 목록
+    campaign_participations = db_manager.get_campaign_participations(campaign_id)
     
-    if not project_influencers:
-        st.info("이 프로젝트에 할당된 인플루언서가 없습니다.")
+    if not campaign_participations:
+        st.info("이 캠페인에 참여한 인플루언서가 없습니다.")
         return
     
-    st.subheader("👥 할당된 인플루언서 성과")
+    st.subheader("👥 참여 인플루언서 성과")
     
-    for i, pi in enumerate(project_influencers):
+    for i, participation in enumerate(campaign_participations):
         with st.container():
             col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
             
             with col1:
-                st.markdown(f"**{pi.get('influencer_name') or pi['sns_id']}**")
-                st.caption(f"플랫폼: {pi['platform']} | 상태: {pi['status']}")
+                st.markdown(f"**{participation.get('influencer_name') or participation['sns_id']}**")
+                st.caption(f"플랫폼: {participation['platform']} | 샘플상태: {participation['sample_status']}")
+                st.caption(f"비용: {participation['cost_krw']:,}원 | 업로드: {'✅' if participation['content_uploaded'] else '❌'}")
             
             with col2:
-                if st.button("성과 크롤링", key=f"crawl_{pi['id']}_{i}"):
-                    st.session_state.crawling_influencer = pi
+                if st.button("성과 크롤링", key=f"perf_crawl_{participation['id']}_{i}"):
+                    st.session_state.crawling_influencer = participation
                     st.rerun()
             
             with col3:
-                if st.button("성과 입력", key=f"input_{pi['id']}_{i}"):
-                    st.session_state.inputting_performance = pi
+                if st.button("성과 입력", key=f"perf_input_{participation['id']}_{i}"):
+                    st.session_state.inputting_performance = participation
                     st.rerun()
             
             with col4:
-                if st.button("상세보기", key=f"detail_{pi['id']}_{i}"):
-                    st.session_state.viewing_performance = pi
+                if st.button("상세보기", key=f"perf_detail_{participation['id']}_{i}"):
+                    st.session_state.viewing_performance = participation
                     st.rerun()
             
             # 성과 지표 표시
-            metrics = db_manager.get_performance_metrics(project_id, pi['influencer_id'])
+            metrics = db_manager.get_performance_metrics(campaign_id, participation['influencer_id'])
             if metrics:
                 metric_cols = st.columns(len(metrics))
-                for i, metric in enumerate(metrics):
-                    with metric_cols[i]:
+                for j, metric in enumerate(metrics):
+                    with metric_cols[j]:
                         st.metric(
                             metric['metric_type'].title(),
                             f"{metric['metric_value']:,}",

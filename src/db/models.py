@@ -41,14 +41,18 @@ class UserStats(BaseModel):
     total_comments: int = 0
     last_crawl_date: Optional[datetime] = None
 
-class Project(BaseModel):
-    """프로젝트 데이터 모델"""
+class Campaign(BaseModel):
+    """캠페인 데이터 모델"""
     id: Optional[str] = None
-    user_id: Optional[str] = None
-    project_name: str
-    project_type: str  # seeding, promotion, sales
-    description: Optional[str] = None
-    status: str = "active"  # active, completed, cancelled
+    created_by: Optional[str] = None
+    campaign_name: str
+    campaign_description: Optional[str] = None
+    campaign_type: str  # seeding, promotion, sales
+    start_date: datetime
+    end_date: Optional[datetime] = None
+    status: str = "planned"  # planned, active, paused, completed, canceled
+    campaign_instructions: Optional[str] = None  # 캠페인 지시사항
+    tags: Optional[List[str]] = None  # 관련 Tag정보(복수 태그)
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
@@ -65,10 +69,10 @@ class Influencer(BaseModel):
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
-class ProjectInfluencer(BaseModel):
-    """프로젝트-인플루언서 연결 데이터 모델"""
+class CampaignInfluencer(BaseModel):
+    """캠페인-인플루언서 연결 데이터 모델"""
     id: Optional[str] = None
-    project_id: str
+    campaign_id: str
     influencer_id: str
     status: str = "assigned"  # assigned, in_progress, completed, cancelled
     final_output_url: Optional[str] = None
@@ -78,10 +82,27 @@ class ProjectInfluencer(BaseModel):
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
+class CampaignInfluencerParticipation(BaseModel):
+    """캠페인 인플루언서 참여 데이터 모델"""
+    id: Optional[str] = None
+    campaign_id: str
+    influencer_id: str
+    manager_comment: Optional[str] = None
+    influencer_requests: Optional[str] = None
+    memo: Optional[str] = None
+    sample_status: str = "요청"  # 요청, 발송준비, 발송완료, 수령
+    influencer_feedback: Optional[str] = None
+    content_uploaded: bool = False
+    cost_krw: float = 0.0
+    content_links: List[str] = []
+    created_by: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
 class PerformanceMetric(BaseModel):
     """성과 지표 데이터 모델"""
     id: Optional[str] = None
-    project_id: str
+    campaign_id: str
     influencer_id: str
     metric_type: str  # likes, comments, shares, views, clicks, conversions
     metric_value: int = 0

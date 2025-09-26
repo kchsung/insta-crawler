@@ -216,9 +216,9 @@ class DatabaseManager:
             st.error(f"사용자 통계 조회 중 오류가 발생했습니다: {str(e)}")
             return None
     
-    # 프로젝트 관리 관련 메서드
-    def create_project(self, project) -> Dict[str, Any]:
-        """프로젝트 생성"""
+    # 캠페인 관리 관련 메서드
+    def create_campaign(self, campaign) -> Dict[str, Any]:
+        """캠페인 생성"""
         try:
             client = self.get_client()
             user_id = self.get_current_user_id()
@@ -227,45 +227,111 @@ class DatabaseManager:
             if not user_id:
                 user_id = self.get_or_create_anonymous_user_id()
             
-            project_data = {
-                "user_id": user_id,
-                "project_name": project.project_name,
-                "project_type": project.project_type,
-                "description": project.description,
-                "status": project.status
+            campaign_data = {
+                "created_by": user_id,
+                "campaign_name": campaign.campaign_name,
+                "campaign_description": campaign.campaign_description,
+                "campaign_type": campaign.campaign_type,
+                "start_date": campaign.start_date.strftime('%Y-%m-%d'),
+                "end_date": campaign.end_date.strftime('%Y-%m-%d') if campaign.end_date else None,
+                "status": campaign.status,
+                "campaign_instructions": campaign.campaign_instructions,
+                "tags": campaign.tags
             }
             
-            response = client.table("projects")\
-                .insert(project_data)\
+            response = client.table("campaigns")\
+                .insert(campaign_data)\
                 .execute()
             
-            return {"success": True, "data": response.data, "message": "프로젝트가 생성되었습니다."}
+            return {"success": True, "data": response.data, "message": "캠페인이 생성되었습니다."}
         except Exception as e:
-            return {"success": False, "message": f"프로젝트 생성 중 오류가 발생했습니다: {str(e)}"}
+            return {"success": False, "message": f"캠페인 생성 중 오류가 발생했습니다: {str(e)}"}
     
-    def get_projects(self) -> List[Dict[str, Any]]:
-        """프로젝트 목록 조회"""
+    def get_campaigns(self) -> List[Dict[str, Any]]:
+        """캠페인 목록 조회 (모든 캠페인 표시)"""
         try:
             client = self.get_client()
-            user_id = self.get_current_user_id()
             
-            # 로그인하지 않은 경우 임시 사용자 ID 사용
-            if not user_id:
-                user_id = self.get_or_create_anonymous_user_id()
-            
-            response = client.table("projects")\
+            # 모든 캠페인 조회 (생성자와 상관없이)
+            response = client.table("campaigns")\
                 .select("*")\
-                .eq("user_id", user_id)\
                 .order("created_at", desc=True)\
                 .execute()
             
             return response.data
         except Exception as e:
-            st.error(f"프로젝트 조회 중 오류가 발생했습니다: {str(e)}")
+            st.error(f"캠페인 조회 중 오류가 발생했습니다: {str(e)}")
             return []
     
-    def delete_project(self, project_id: str) -> Dict[str, Any]:
-        """프로젝트 삭제"""
+    def update_campaign(self, campaign_id: str, campaign_data: Dict[str, Any]) -> Dict[str, Any]:
+        """캠페인 정보 업데이트"""
+        try:
+            client = self.get_client()
+            
+            # 업데이트할 데이터 준비
+            update_data = {
+                "campaign_name": campaign_data.get("campaign_name"),
+                "campaign_description": campaign_data.get("campaign_description"),
+                "campaign_type": campaign_data.get("campaign_type"),
+                "start_date": campaign_data.get("start_date"),
+                "end_date": campaign_data.get("end_date"),
+                "status": campaign_data.get("status"),
+                "campaign_instructions": campaign_data.get("campaign_instructions"),
+                "tags": campaign_data.get("tags"),
+                "updated_at": datetime.now().isoformat()
+            }
+            
+            # None 값 제거
+            update_data = {k: v for k, v in update_data.items() if v is not None}
+            
+            response = client.table("campaigns")\
+                .update(update_data)\
+                .eq("id", campaign_id)\
+                .execute()
+            
+            if response.data:
+                return {"success": True, "data": response.data, "message": "캠페인이 수정되었습니다."}
+            else:
+                return {"success": False, "message": "캠페인을 찾을 수 없습니다."}
+        except Exception as e:
+            return {"success": False, "message": f"캠페인 수정 중 오류가 발생했습니다: {str(e)}"}
+    
+    def get_all_campaigns(self) -> List[Dict[str, Any]]:
+        """모든 캠페인 목록 조회 (RLS 정책 우회용 - 개발/디버깅용)"""
+        try:
+            client = self.get_client()
+            
+            response = client.table("campaigns")\
+                .select("*")\
+                .order("created_at", desc=True)\
+                .execute()
+            
+            print(f"DEBUG - get_all_campaigns: Found {len(response.data) if response.data else 0} campaigns")
+            return response.data
+        except Exception as e:
+            st.error(f"모든 캠페인 조회 중 오류가 발생했습니다: {str(e)}")
+            print(f"DEBUG - Exception in get_all_campaigns: {e}")
+            return []
+    
+    def update_campaign_ownership(self, campaign_id: str, new_owner_id: str) -> Dict[str, Any]:
+        """캠페인 소유권 변경"""
+        try:
+            client = self.get_client()
+            
+            response = client.table("campaigns")\
+                .update({"created_by": new_owner_id})\
+                .eq("id", campaign_id)\
+                .execute()
+            
+            if response.data:
+                return {"success": True, "message": "캠페인 소유권이 변경되었습니다."}
+            else:
+                return {"success": False, "message": "캠페인을 찾을 수 없습니다."}
+        except Exception as e:
+            return {"success": False, "message": f"캠페인 소유권 변경 중 오류가 발생했습니다: {str(e)}"}
+    
+    def delete_campaign(self, campaign_id: str) -> Dict[str, Any]:
+        """캠페인 삭제"""
         try:
             client = self.get_client()
             user_id = self.get_current_user_id()
@@ -274,15 +340,15 @@ class DatabaseManager:
             if not user_id:
                 user_id = self.get_or_create_anonymous_user_id()
             
-            response = client.table("projects")\
+            response = client.table("campaigns")\
                 .delete()\
-                .eq("id", project_id)\
-                .eq("user_id", user_id)\
+                .eq("id", campaign_id)\
+                .eq("created_by", user_id)\
                 .execute()
             
-            return {"success": True, "message": "프로젝트가 삭제되었습니다."}
+            return {"success": True, "message": "캠페인이 삭제되었습니다."}
         except Exception as e:
-            return {"success": False, "message": f"프로젝트 삭제 중 오류가 발생했습니다: {str(e)}"}
+            return {"success": False, "message": f"캠페인 삭제 중 오류가 발생했습니다: {str(e)}"}
     
     # 인플루언서 관리 관련 메서드
     def create_influencer(self, influencer) -> Dict[str, Any]:
@@ -415,9 +481,9 @@ class DatabaseManager:
         except Exception as e:
             return {"success": False, "message": f"인플루언서 삭제 중 오류가 발생했습니다: {str(e)}"}
     
-    # 프로젝트-인플루언서 연결 관련 메서드
-    def assign_influencer_to_project(self, project_id: str, influencer_id: str) -> Dict[str, Any]:
-        """프로젝트에 인플루언서 할당"""
+    # 캠페인-인플루언서 연결 관련 메서드
+    def assign_influencer_to_campaign(self, campaign_id: str, influencer_id: str) -> Dict[str, Any]:
+        """캠페인에 인플루언서 할당"""
         try:
             client = self.get_client()
             user_id = self.get_current_user_id()
@@ -427,12 +493,12 @@ class DatabaseManager:
                 user_id = self.get_or_create_anonymous_user_id()
             
             assignment_data = {
-                "project_id": project_id,
+                "campaign_id": campaign_id,
                 "influencer_id": influencer_id,
                 "status": "assigned"
             }
             
-            response = client.table("project_influencers")\
+            response = client.table("campaign_influencers")\
                 .insert(assignment_data)\
                 .execute()
             
@@ -440,8 +506,8 @@ class DatabaseManager:
         except Exception as e:
             return {"success": False, "message": f"인플루언서 할당 중 오류가 발생했습니다: {str(e)}"}
     
-    def get_project_influencers(self, project_id: str) -> List[Dict[str, Any]]:
-        """프로젝트에 할당된 인플루언서 목록 조회"""
+    def get_campaign_influencers(self, campaign_id: str) -> List[Dict[str, Any]]:
+        """캠페인에 할당된 인플루언서 목록 조회"""
         try:
             client = self.get_client()
             user_id = self.get_current_user_id()
@@ -449,7 +515,7 @@ class DatabaseManager:
             if not user_id:
                 return []
             
-            response = client.table("project_influencers")\
+            response = client.table("campaign_influencers")\
                 .select("""
                     *,
                     influencers (
@@ -461,7 +527,7 @@ class DatabaseManager:
                         engagement_rate
                     )
                 """)\
-                .eq("project_id", project_id)\
+                .eq("campaign_id", campaign_id)\
                 .execute()
             
             # 데이터 구조 정리
@@ -471,7 +537,7 @@ class DatabaseManager:
                     influencer_data = item['influencers']
                     result.append({
                         'id': item['id'],
-                        'project_id': item['project_id'],
+                        'campaign_id': item['campaign_id'],
                         'influencer_id': item['influencer_id'],
                         'status': item['status'],
                         'final_output_url': item['final_output_url'],
@@ -487,9 +553,133 @@ class DatabaseManager:
             
             return result
         except Exception as e:
-            st.error(f"프로젝트 인플루언서 조회 중 오류가 발생했습니다: {str(e)}")
+            st.error(f"캠페인 인플루언서 조회 중 오류가 발생했습니다: {str(e)}")
             return []
     
+    # 캠페인 참여 관리 관련 메서드
+    def add_influencer_to_campaign(self, participation) -> Dict[str, Any]:
+        """캠페인에 인플루언서 참여 추가"""
+        try:
+            client = self.get_client()
+            user_id = self.get_current_user_id()
+            
+            # 로그인하지 않은 경우 임시 사용자 ID 사용
+            if not user_id:
+                user_id = self.get_or_create_anonymous_user_id()
+            
+            # 디버깅 로그
+            print(f"DEBUG - add_influencer_to_campaign: user_id = {user_id}")
+            print(f"DEBUG - campaign_id = {participation.campaign_id}")
+            print(f"DEBUG - influencer_id = {participation.influencer_id}")
+            
+            participation_data = {
+                "campaign_id": participation.campaign_id,
+                "influencer_id": participation.influencer_id,
+                "manager_comment": participation.manager_comment,
+                "influencer_requests": participation.influencer_requests,
+                "memo": participation.memo,
+                "sample_status": participation.sample_status,
+                "influencer_feedback": participation.influencer_feedback,
+                "content_uploaded": participation.content_uploaded,
+                "cost_krw": participation.cost_krw,
+                "content_links": participation.content_links,
+                "created_by": user_id
+            }
+            
+            print(f"DEBUG - participation_data = {participation_data}")
+            
+            response = client.table("campaign_influencer_participations")\
+                .insert(participation_data)\
+                .execute()
+            
+            print(f"DEBUG - Insert response: {response.data}")
+            
+            return {"success": True, "data": response.data, "message": "인플루언서가 캠페인에 참여로 추가되었습니다."}
+        except Exception as e:
+            print(f"DEBUG - Exception in add_influencer_to_campaign: {e}")
+            return {"success": False, "message": f"인플루언서 참여 추가 중 오류가 발생했습니다: {str(e)}"}
+    
+    def get_campaign_participations(self, campaign_id: str) -> List[Dict[str, Any]]:
+        """캠페인 참여 인플루언서 목록 조회"""
+        try:
+            client = self.get_client()
+            
+            response = client.table("campaign_influencer_participations")\
+                .select("""
+                    *,
+                    connecta_influencers (
+                        id,
+                        platform,
+                        sns_id,
+                        influencer_name,
+                        followers_count,
+                        post_count,
+                        profile_image_url
+                    )
+                """)\
+                .eq("campaign_id", campaign_id)\
+                .execute()
+            
+            # 데이터 구조 정리
+            result = []
+            for item in response.data:
+                if item.get('connecta_influencers'):
+                    influencer_data = item['connecta_influencers']
+                    result.append({
+                        'id': item['id'],
+                        'campaign_id': item['campaign_id'],
+                        'influencer_id': item['influencer_id'],
+                        'manager_comment': item['manager_comment'],
+                        'influencer_requests': item['influencer_requests'],
+                        'memo': item['memo'],
+                        'sample_status': item['sample_status'],
+                        'influencer_feedback': item['influencer_feedback'],
+                        'content_uploaded': item['content_uploaded'],
+                        'cost_krw': item['cost_krw'],
+                        'content_links': item['content_links'],
+                        'created_at': item['created_at'],
+                        'updated_at': item['updated_at'],
+                        'platform': influencer_data['platform'],
+                        'sns_id': influencer_data['sns_id'],
+                        'influencer_name': influencer_data['influencer_name'],
+                        'followers_count': influencer_data['followers_count'],
+                        'post_count': influencer_data['post_count'],
+                        'profile_image_url': influencer_data['profile_image_url']
+                    })
+            
+            return result
+        except Exception as e:
+            st.error(f"캠페인 참여자 조회 중 오류가 발생했습니다: {str(e)}")
+            return []
+    
+    def update_campaign_participation(self, participation_id: str, updates: Dict[str, Any]) -> Dict[str, Any]:
+        """캠페인 참여 정보 업데이트"""
+        try:
+            client = self.get_client()
+            
+            response = client.table("campaign_influencer_participations")\
+                .update(updates)\
+                .eq("id", participation_id)\
+                .execute()
+            
+            return {"success": True, "data": response.data, "message": "참여 정보가 업데이트되었습니다."}
+        except Exception as e:
+            return {"success": False, "message": f"참여 정보 업데이트 중 오류가 발생했습니다: {str(e)}"}
+    
+    def remove_influencer_from_campaign(self, participation_id: str) -> Dict[str, Any]:
+        """캠페인에서 인플루언서 참여 제거"""
+        try:
+            client = self.get_client()
+            
+            response = client.table("campaign_influencer_participations")\
+                .delete()\
+                .eq("id", participation_id)\
+                .execute()
+            
+            return {"success": True, "message": "인플루언서 참여가 제거되었습니다."}
+        except Exception as e:
+            return {"success": False, "message": f"참여 제거 중 오류가 발생했습니다: {str(e)}"}
+
     # 성과 관리 관련 메서드
     def create_performance_metric(self, metric) -> Dict[str, Any]:
         """성과 지표 생성"""
@@ -502,7 +692,7 @@ class DatabaseManager:
                 user_id = self.get_or_create_anonymous_user_id()
             
             metric_data = {
-                "project_id": metric.project_id,
+                "campaign_id": metric.campaign_id,
                 "influencer_id": metric.influencer_id,
                 "metric_type": metric.metric_type,
                 "metric_value": metric.metric_value,
@@ -517,7 +707,7 @@ class DatabaseManager:
         except Exception as e:
             return {"success": False, "message": f"성과 지표 저장 중 오류가 발생했습니다: {str(e)}"}
     
-    def get_performance_metrics(self, project_id: str, influencer_id: str) -> List[Dict[str, Any]]:
+    def get_performance_metrics(self, campaign_id: str, influencer_id: str) -> List[Dict[str, Any]]:
         """성과 지표 조회"""
         try:
             client = self.get_client()
@@ -528,7 +718,7 @@ class DatabaseManager:
             
             response = client.table("performance_metrics")\
                 .select("*")\
-                .eq("project_id", project_id)\
+                .eq("campaign_id", campaign_id)\
                 .eq("influencer_id", influencer_id)\
                 .order("measurement_date", desc=True)\
                 .execute()
@@ -784,7 +974,7 @@ class DatabaseManager:
             # connecta_influencers 테이블에서 sns_id로만 검색
             # 먼저 정확한 매칭 시도
             response = client.table("connecta_influencers")\
-                .select("id, sns_id, influencer_name, content_category, followers_count, post_count, profile_text, profile_image_url, created_at")\
+                .select("id, sns_id, influencer_name, content_category, followers_count, post_count, profile_text, profile_image_url, sns_url, kakao_channel_id, created_at")\
                 .eq("platform", platform)\
                 .eq("sns_id", sns_id)\
                 .execute()
@@ -792,7 +982,7 @@ class DatabaseManager:
             # 정확한 매칭이 실패하면 대소문자 구분 없이 검색
             if not response.data:
                 all_influencers = client.table("connecta_influencers")\
-                    .select("id, sns_id, influencer_name, content_category, followers_count, post_count, profile_text, profile_image_url, created_at")\
+                    .select("id, sns_id, influencer_name, content_category, followers_count, post_count, profile_text, profile_image_url, sns_url, kakao_channel_id, created_at")\
                     .eq("platform", platform)\
                     .execute()
                 
@@ -828,7 +1018,9 @@ class DatabaseManager:
                         "followers_count": influencer.get("followers_count", 0),
                         "post_count": influencer.get("post_count", 0),
                         "profile_text": influencer.get("profile_text", ""),
-                        "profile_url": influencer.get("profile_image_url", ""),
+                        "profile_image_url": influencer.get("profile_image_url", ""),
+                        "sns_url": influencer.get("sns_url", ""),
+                        "kakao_channel_id": influencer.get("kakao_channel_id", ""),
                         "created_at": influencer.get("created_at", "")
                     },
                     "message": "인플루언서 정보를 찾았습니다.",

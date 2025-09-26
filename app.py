@@ -22,7 +22,7 @@ from src.ui.auth_components import render_auth_sidebar, render_user_profile  # (
 from src.ui.crawler_components import render_single_crawl_form, render_batch_crawl_form, render_crawl_history  # (미사용 시 삭제해도 됨)
 from src.ui.project_components import (
     render_single_url_crawl, render_batch_url_crawl,
-    render_project_management, render_performance_management, render_performance_crawl
+    render_campaign_management, render_performance_management, render_performance_crawl
 )
 from src.supabase.auth import supabase_auth
 
@@ -213,11 +213,11 @@ def render_sidebar():
         
         # 현재 선택된 페이지 초기화
         if 'current_page' not in st.session_state:
-            st.session_state.current_page = 'project_management'
+            st.session_state.current_page = 'campaign_management'
         
         # 크롤링 메뉴가 비활성화된 상태에서 크롤링 페이지가 선택된 경우 관리 페이지로 리다이렉트
         if not show_crawling_menu and st.session_state.current_page in ['single_crawl', 'batch_crawl', 'performance_crawl']:
-            st.session_state.current_page = 'project_management'
+            st.session_state.current_page = 'campaign_management'
         
         # 크롤링 메뉴 그룹
         if show_crawling_menu:
@@ -245,7 +245,7 @@ def render_sidebar():
         st.markdown("### 📋 관리 메뉴")
         
         management_menu_options = {
-            'project_management': '📁 프로젝트 관리',
+            'campaign_management': '📁 캠페인 관리',
             'performance_management': '📊 성과 관리'
         }
         
@@ -361,7 +361,7 @@ def render_main_content():
     #     return
 
     # 현재 선택된 페이지에 따라 다른 컴포넌트 렌더링
-    current_page = st.session_state.get('current_page', 'project_management')
+    current_page = st.session_state.get('current_page', 'campaign_management')
     
     if current_page == 'single_crawl':
         render_single_url_crawl()
@@ -369,13 +369,13 @@ def render_main_content():
         render_batch_url_crawl()
     elif current_page == 'performance_crawl':
         render_performance_crawl()
-    elif current_page == 'project_management':
-        render_project_management()
+    elif current_page == 'campaign_management':
+        render_campaign_management()
     elif current_page == 'performance_management':
         render_performance_management()
     else:
-        # 기본값으로 프로젝트 관리 표시
-        render_project_management()
+        # 기본값으로 캠페인 관리 표시
+        render_campaign_management()
 
 
 # ── App ──────────────────────────────────────────────────────
