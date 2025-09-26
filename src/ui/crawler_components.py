@@ -11,7 +11,7 @@ def render_single_crawl_form() -> Dict[str, Any]:
     st.markdown("하나의 Instagram 포스트를 크롤링합니다.")
     
     # 디버그 모드 토글
-    debug_mode = st.checkbox("🔍 디버그 모드", help="페이지의 HTML 요소들을 확인할 수 있습니다")
+    debug_mode = st.checkbox("🔍 디버그 모드", help="페이지의 HTML 요소들을 확인할 수 있습니다", key="single_post_debug_mode")
     
     col1, col2 = st.columns([2, 1])
     
@@ -23,7 +23,7 @@ def render_single_crawl_form() -> Dict[str, Any]:
             help="Instagram 포스트의 전체 URL을 입력해주세요"
         )
         
-        if st.button("🔍 크롤링 시작", type="primary"):
+        if st.button("🔍 크롤링 시작", type="primary", key="single_post_crawl_start"):
             if not url:
                 st.error("URL을 입력해주세요!")
                 return {"action": "error", "message": "URL을 입력해주세요!"}
@@ -159,10 +159,10 @@ def render_batch_crawl_form() -> Dict[str, Any]:
             st.dataframe(df.head(10), use_container_width=True)
             
             # 크롤링 세션 생성
-            session_name = st.text_input("세션 이름", value=f"Batch Crawl - {len(valid_df)} posts")
+            session_name = st.text_input("세션 이름", value=f"Batch Crawl - {len(valid_df)} posts", key="excel_batch_session_name")
             
             # 크롤링 시작 버튼
-            if st.button("🚀 일괄 크롤링 시작", type="primary"):
+            if st.button("🚀 일괄 크롤링 시작", type="primary", key="batch_crawl_start_excel"):
                 if len(valid_df) == 0:
                     st.error("크롤링할 유효한 데이터가 없습니다.")
                     return {"action": "error", "message": "크롤링할 유효한 데이터가 없습니다."}

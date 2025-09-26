@@ -305,20 +305,95 @@ class DatabaseManager:
         except Exception as e:
             return {"success": False, "message": f"인플루언서 등록 중 오류가 발생했습니다: {str(e)}"}
     
-    def get_influencers(self, platform: Optional[str] = None) -> List[Dict[str, Any]]:
-        """인플루언서 목록 조회 - connecta_influencers 테이블 사용"""
+    def get_influencers(self, platform: Optional[str] = None, first_crawled_only: bool = False) -> List[Dict[str, Any]]:
+        """인플루언서 목록 조회 - connecta_influencers 테이블 사용 (모든 데이터 가져오기)"""
         try:
             client = self.get_client()
             
-            query = client.table("connecta_influencers")\
-                .select("id, sns_id, influencer_name, platform, followers_count, post_count, profile_image_url, created_at")\
-                .order("created_at", desc=True)
+            all_data = []
+            page_size = 1000
+            offset = 0
             
-            if platform:
-                query = query.eq("platform", platform)
+            while True:
+                query = client.table("connecta_influencers")\
+                    .select("id, sns_id, influencer_name, platform, followers_count, post_count, profile_image_url, created_at, updated_at, first_crawled")\
+                    .order("created_at", desc=True)\
+                    .range(offset, offset + page_size - 1)
+                
+                if platform:
+                    query = query.eq("platform", platform)
+                
+                # first_crawled 필터 적용
+                if first_crawled_only:
+                    query = query.eq("first_crawled", False)
+                
+                response = query.execute()
+                
+                if not response.data:
+                    break
+                
+                all_data.extend(response.data)
+                
+                # 가져온 데이터가 페이지 크기보다 적으면 마지막 페이지
+                if len(response.data) < page_size:
+                    break
+                
+                offset += page_size
             
-            response = query.execute()
-            return response.data
+            return all_data
+        except Exception as e:
+            st.error(f"인플루언서 조회 중 오류가 발생했습니다: {str(e)}")
+            return []
+    
+    def get_influencers_with_update_filter(self, platform: Optional[str] = None, 
+                                         update_filter_type: str = "전체", 
+                                         update_date: Optional[datetime] = None,
+                                         first_crawled_only: bool = False) -> List[Dict[str, Any]]:
+        """업데이트 필터를 적용한 인플루언서 목록 조회 (모든 데이터 가져오기)"""
+        try:
+            client = self.get_client()
+            
+            all_data = []
+            page_size = 1000
+            offset = 0
+            
+            while True:
+                query = client.table("connecta_influencers")\
+                    .select("id, sns_id, influencer_name, platform, followers_count, post_count, profile_image_url, created_at, updated_at, first_crawled")\
+                    .order("created_at", desc=True)\
+                    .range(offset, offset + page_size - 1)
+                
+                # 플랫폼 필터 적용
+                if platform:
+                    query = query.eq("platform", platform)
+                
+                # 업데이트 필터 적용
+                if update_filter_type != "전체" and update_date:
+                    update_datetime = datetime.combine(update_date, datetime.min.time())
+                    
+                    if update_filter_type == "마지막 업데이트 이후":
+                        query = query.gte("updated_at", update_datetime.isoformat())
+                    elif update_filter_type == "마지막 업데이트 이전":
+                        query = query.lt("updated_at", update_datetime.isoformat())
+                
+                # first_crawled 필터 적용
+                if first_crawled_only:
+                    query = query.eq("first_crawled", False)
+                
+                response = query.execute()
+                
+                if not response.data:
+                    break
+                
+                all_data.extend(response.data)
+                
+                # 가져온 데이터가 페이지 크기보다 적으면 마지막 페이지
+                if len(response.data) < page_size:
+                    break
+                
+                offset += page_size
+            
+            return all_data
         except Exception as e:
             st.error(f"인플루언서 조회 중 오류가 발생했습니다: {str(e)}")
             return []
@@ -504,6 +579,10 @@ class DatabaseManager:
             
             if profile_data.get('profile_image_url'):
                 update_data["profile_image_url"] = profile_data['profile_image_url']
+            
+            # 크롤링 성공 시 first_crawled를 True로 설정
+            if profile_data.get('status') == 'success':
+                update_data["first_crawled"] = True
             
             # 업데이트할 데이터가 있는 경우에만 실행
             if len(update_data) > 1:  # updated_at 외에 다른 필드가 있는 경우

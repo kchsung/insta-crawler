@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from typing import Dict, Any, List, Optional
+from datetime import datetime, timedelta
 from ..instagram_crawler import InstagramCrawler
 from ..db.database import db_manager
 from ..db.models import Project, Influencer, ProjectInfluencer, PerformanceMetric, InstagramCrawlResult
@@ -216,9 +217,9 @@ def render_single_url_crawl():
     # 크롤링 옵션
     col1, col2 = st.columns(2)
     with col1:
-        debug_mode = st.checkbox("🔍 디버그 모드", help="페이지의 HTML 요소들을 확인할 수 있습니다")
+        debug_mode = st.checkbox("🔍 디버그 모드", help="페이지의 HTML 요소들을 확인할 수 있습니다", key="single_crawl_debug_mode")
     with col2:
-        save_to_db = st.checkbox("💾 데이터베이스 저장", value=True, help="크롤링 결과를 데이터베이스에 저장합니다")
+        save_to_db = st.checkbox("💾 데이터베이스 저장", value=True, help="크롤링 결과를 데이터베이스에 저장합니다", key="single_crawl_save_to_db")
     
     # DB 확인 상태 초기화
     if 'db_checked' not in st.session_state:
@@ -303,7 +304,7 @@ def render_single_url_crawl():
     with col2:
         # DB 확인이 완료된 경우에만 크롤링 시작 버튼 활성화
         if st.session_state.db_checked:
-            if st.button("🚀 크롤링 시작", type="primary"):
+            if st.button("🚀 크롤링 시작", type="primary", key="single_url_crawl_start"):
                 if not sns_id and not url:
                     st.error("SNS ID 또는 URL을 입력해주세요!")
                     return
@@ -388,7 +389,7 @@ def render_single_url_crawl():
                         st.error(crawl_result["message"])
         else:
             # DB 확인이 완료되지 않은 경우 비활성화된 버튼 표시
-            st.button("🚀 크롤링 시작", disabled=True, help="먼저 'DB 확인' 버튼을 클릭해주세요")
+            st.button("🚀 크롤링 시작", disabled=True, help="먼저 'DB 확인' 버튼을 클릭해주세요", key="single_url_crawl_start_disabled")
     
     # DB 확인 결과가 있으면 표시
     if st.session_state.db_checked and st.session_state.db_result:
@@ -416,20 +417,99 @@ def render_batch_url_crawl():
         }[x]
     )
     
-    # 인플루언서 목록 조회
-    influencers = db_manager.get_influencers(platform=platform_filter if platform_filter != "전체" else None)
+    # 마지막 업데이트 기반 필터
+    st.subheader("🕒 업데이트 기반 필터")
+    col1, col2, col3 = st.columns(3)
     
-    if not influencers:
+    with col1:
+        update_filter_type = st.selectbox(
+            "업데이트 필터 타입",
+            ["전체", "마지막 업데이트 이후", "마지막 업데이트 이전"],
+            key="update_filter_type",
+            help="마지막 업데이트 시간을 기준으로 필터링합니다"
+        )
+    
+    with col2:
+        if update_filter_type != "전체":
+            # 마지막 업데이트 날짜 선택
+            default_date = datetime.now() - timedelta(days=7)  # 기본값: 7일 전
+            
+            update_date = st.date_input(
+                "기준 날짜",
+                value=default_date,
+                key="update_filter_date",
+                help="이 날짜를 기준으로 필터링합니다"
+            )
+        else:
+            update_date = None
+    
+    with col3:
+        first_crawled_only = st.checkbox(
+            "🆕 첫 크롤링만",
+            key="first_crawled_filter",
+            help="아직 크롤링되지 않은 인플루언서만 선택합니다 (first_crawled = FALSE)"
+        )
+    
+    # 전체 인플루언서 목록 조회 (필터링 없이 - 실제 전체 수를 확인하기 위해)
+    all_influencers_total = db_manager.get_influencers(
+        platform=platform_filter if platform_filter != "전체" else None,
+        first_crawled_only=False  # 전체 수를 확인하기 위해 False로 고정
+    )
+    
+    # 필터링된 인플루언서 목록 조회 (실제 표시할 목록)
+    filtered_influencers = db_manager.get_influencers_with_update_filter(
+        platform=platform_filter if platform_filter != "전체" else None,
+        update_filter_type=update_filter_type,
+        update_date=update_date,
+        first_crawled_only=first_crawled_only
+    )
+    
+    if not filtered_influencers:
         st.info("크롤링할 인플루언서가 없습니다. 먼저 인플루언서를 등록해주세요.")
         return
     
-    # 인플루언서 선택
-    influencer_options = {f"{inf.get('influencer_name') or inf['sns_id']} ({inf['platform']})": inf['id'] for inf in influencers}
-    selected_influencers = st.multiselect(
-        "크롤링할 인플루언서 선택",
-        options=list(influencer_options.keys()),
-        help="여러 인플루언서를 선택할 수 있습니다"
-    )
+    # 인플루언서 선택 옵션 생성
+    filtered_influencer_options = {f"{inf.get('influencer_name') or inf['sns_id']} ({inf['platform']})": inf['id'] for inf in filtered_influencers}
+    
+    # 필터링 결과 표시
+    if first_crawled_only:
+        st.info(f"📊 {len(filtered_influencers)}개 인플루언서가 표시됩니다 (첫 크롤링 대상)")
+    else:
+        st.info(f"📊 {len(filtered_influencers)}개 인플루언서가 표시됩니다")
+    
+    # 모두선택 옵션 추가
+    col1, col2, col3 = st.columns([2, 1, 1])
+    with col1:
+        selected_influencers = st.multiselect(
+            "크롤링할 인플루언서 선택",
+            options=list(filtered_influencer_options.keys()),
+            help="여러 인플루언서를 선택할 수 있습니다"
+        )
+    
+    with col2:
+        if st.button("✅ 모두선택", help="표시된 모든 인플루언서를 선택합니다", key="select_filtered_influencers"):
+            st.session_state.selected_filtered_influencers = True
+            st.rerun()
+        
+        if st.button("❌ 모두해제", help="모든 선택을 해제합니다", key="clear_all_selections"):
+            st.session_state.selected_filtered_influencers = False
+            st.session_state.selected_all_influencers = False
+            st.rerun()
+    
+    with col3:
+        if st.button("🌐 전체선택", help="전체 인플루언서를 선택합니다 (필터 무시)", key="select_all_influencers"):
+            st.session_state.selected_all_influencers = True
+            st.session_state.selected_filtered_influencers = False
+            st.rerun()
+    
+    # 선택 상태 처리
+    if hasattr(st.session_state, 'selected_filtered_influencers') and st.session_state.selected_filtered_influencers:
+        selected_influencers = list(filtered_influencer_options.keys())
+    elif hasattr(st.session_state, 'selected_all_influencers') and st.session_state.selected_all_influencers:
+        # 전체 인플루언서 선택 시 전체 목록을 다시 조회
+        all_influencer_options = {f"{inf.get('influencer_name') or inf['sns_id']} ({inf['platform']})": inf['id'] for inf in all_influencers_total}
+        selected_influencers = list(all_influencer_options.keys())
+        st.warning("⚠️ 전체 인플루언서가 선택되었습니다. 필터 조건을 무시하고 모든 인플루언서를 크롤링합니다.")
     
     if not selected_influencers:
         st.warning("크롤링할 인플루언서를 선택해주세요.")
@@ -438,11 +518,11 @@ def render_batch_url_crawl():
     # 크롤링 옵션
     col1, col2 = st.columns(2)
     with col1:
-        debug_mode = st.checkbox("🔍 디버그 모드", help="페이지의 HTML 요소들을 확인할 수 있습니다")
+        debug_mode = st.checkbox("🔍 디버그 모드", help="페이지의 HTML 요소들을 확인할 수 있습니다", key="batch_crawl_debug_mode")
     with col2:
-        session_name = st.text_input("세션 이름", value=f"Batch Crawl - {len(selected_influencers)} influencers")
+        session_name = st.text_input("세션 이름", value=f"Batch Crawl - {len(selected_influencers)} influencers", key="batch_crawl_session_name")
     
-    if st.button("🚀 일괄 크롤링 시작", type="primary"):
+    if st.button("🚀 일괄 크롤링 시작", type="primary", key="batch_crawl_start_influencers"):
         if not selected_influencers:
             st.error("크롤링할 인플루언서를 선택해주세요.")
             return
@@ -483,17 +563,49 @@ def render_batch_url_crawl():
                 crawler = InstagramCrawler()
                 results = []
                 
+                # 사용할 인플루언서 데이터 결정
+                if hasattr(st.session_state, 'selected_all_influencers') and st.session_state.selected_all_influencers:
+                    # 전체 인플루언서 선택된 경우
+                    influencers_to_use = all_influencers_total
+                    influencer_options_to_use = all_influencer_options
+                else:
+                    # 필터링된 인플루언서 선택된 경우
+                    influencers_to_use = filtered_influencers
+                    influencer_options_to_use = filtered_influencer_options
+                
                 for i, influencer_name in enumerate(selected_influencers):
-                    influencer_id = influencer_options[influencer_name]
-                    influencer = next(inf for inf in influencers if inf['id'] == influencer_id)
+                    influencer_id = influencer_options_to_use[influencer_name]
+                    influencer = next(inf for inf in influencers_to_use if inf['id'] == influencer_id)
                     
                     update_progress(i, len(selected_influencers), f"크롤링 중: {influencer.get('influencer_name') or influencer['sns_id']}")
                     
                     try:
-                        # URL 생성
+                        # 단일 URL 크롤링 자동화 - 인플루언서 프로필 크롤링
                         if influencer['platform'] == 'instagram':
-                            url = f"https://www.instagram.com/{influencer['sns_id'].replace('@', '')}/"
-                            result = crawler.crawl_instagram_post(url, debug_mode)
+                            # Instagram 프로필 URL 생성
+                            sns_id_clean = influencer['sns_id'].replace('@', '')
+                            url = f"https://www.instagram.com/{sns_id_clean}/"
+                            
+                            # 인플루언서 프로필 크롤링 (단일 URL 크롤링 자동화)
+                            result = crawler.crawl_instagram_profile(url, debug_mode)
+                            
+                            # 크롤링 결과를 데이터베이스에 저장
+                            if result['status'] == 'success':
+                                # 인플루언서 데이터 업데이트
+                                update_result = db_manager.update_influencer_data(influencer_id, result)
+                                if update_result["success"]:
+                                    st.success(f"✅ {influencer.get('influencer_name') or influencer['sns_id']} 데이터 업데이트 완료")
+                                
+                                # 크롤링 원시 데이터 저장
+                                raw_data_result = db_manager.save_crawl_raw_data(
+                                    influencer_id, 
+                                    influencer['platform'], 
+                                    influencer['sns_id'],
+                                    result.get('page_source', ''),
+                                    result,
+                                    result.get('debug_info', {})
+                                )
+                            
                         else:
                             result = {
                                 'status': 'error',
@@ -505,10 +617,11 @@ def render_batch_url_crawl():
                             'platform': influencer['platform'],
                             'sns_id': influencer['sns_id'],
                             'url': url if influencer['platform'] == 'instagram' else 'N/A',
-                            'likes': result.get('likes', 0),
-                            'comments': result.get('comments', 0),
+                            'followers': result.get('followers_count', 0),
+                            'posts': result.get('post_count', 0),
                             'status': result['status'],
-                            'error': result.get('error', '')
+                            'error': result.get('error', ''),
+                            'updated_at': result.get('updated_at', '')
                         })
                         
                     except Exception as e:
@@ -517,39 +630,41 @@ def render_batch_url_crawl():
                             'platform': influencer['platform'],
                             'sns_id': influencer['sns_id'],
                             'url': 'N/A',
-                            'likes': 0,
-                            'comments': 0,
+                            'followers': 0,
+                            'posts': 0,
                             'status': 'error',
-                            'error': str(e)
+                            'error': str(e),
+                            'updated_at': ''
                         })
                 
                 crawler.close_driver()
                 update_progress(len(selected_influencers), len(selected_influencers), "크롤링 완료")
         
-        # 결과를 데이터베이스에 저장
-        successful_posts = 0
-        failed_posts = 0
+        # 결과를 데이터베이스에 저장 (인플루언서 프로필 크롤링 결과)
+        successful_crawls = 0
+        failed_crawls = 0
         
         for result in results:
             if result['status'] == 'success':
+                # 인플루언서 프로필 크롤링 결과를 세션에 기록
                 crawl_result = InstagramCrawlResult(
                     session_id=session_id,
-                    post_name=result['name'],
+                    post_name=f"Profile - {result['name']}",
                     post_url=result['url'],
-                    likes=result['likes'],
-                    comments=result['comments'],
+                    likes=0,  # 프로필 크롤링에서는 좋아요 수가 없음
+                    comments=0,  # 프로필 크롤링에서는 댓글 수가 없음
                     status=result['status']
                 )
                 
                 save_result = db_manager.save_instagram_crawl_result(crawl_result)
                 if save_result["success"]:
-                    successful_posts += 1
+                    successful_crawls += 1
             else:
-                failed_posts += 1
+                failed_crawls += 1
         
         # 세션 업데이트
         if session_id:
-            db_manager.update_instagram_crawl_session(session_id, successful_posts, failed_posts, "completed")
+            db_manager.update_instagram_crawl_session(session_id, successful_crawls, failed_crawls, "completed")
         
         # 결과 표시
         st.success("일괄 크롤링이 완료되었습니다!")
@@ -568,21 +683,31 @@ def render_batch_url_crawl():
             error_count = len(results_df[results_df['status'] == 'error'])
             st.metric("실패", error_count)
         with col4:
-            total_likes = results_df[results_df['status'] == 'success']['likes'].sum()
-            st.metric("총 좋아요", f"{total_likes:,}")
+            total_followers = results_df[results_df['status'] == 'success']['followers'].sum()
+            st.metric("총 팔로워", f"{total_followers:,}")
         
-        # 결과 테이블 표시
+        # 결과 테이블 표시 (필요한 컬럼만)
         st.subheader("📊 크롤링 결과")
-        st.dataframe(results_df, use_container_width=True)
+        display_df = results_df[['name', 'platform', 'sns_id', 'followers', 'posts', 'status', 'error']].copy()
+        display_df.columns = ['인플루언서명', '플랫폼', 'SNS ID', '팔로워 수', '게시물 수', '상태', '오류']
+        st.dataframe(display_df, use_container_width=True)
         
         # CSV 다운로드
-        csv = results_df.to_csv(index=False, encoding='utf-8-sig')
+        csv = display_df.to_csv(index=False, encoding='utf-8-sig')
         st.download_button(
             label="📥 결과 CSV 다운로드",
             data=csv,
-            file_name="batch_crawl_results.csv",
+            file_name="influencer_batch_crawl_results.csv",
             mime="text/csv"
         )
+        
+        # 에러가 있는 경우 상세 표시
+        error_results = results_df[results_df['status'] == 'error']
+        if len(error_results) > 0:
+            st.subheader("⚠️ 에러 상세 정보")
+            error_display = error_results[['name', 'platform', 'sns_id', 'error']].copy()
+            error_display.columns = ['인플루언서명', '플랫폼', 'SNS ID', '오류 메시지']
+            st.dataframe(error_display, use_container_width=True)
 
 def render_project_management():
     """프로젝트 관리 컴포넌트"""
@@ -656,7 +781,7 @@ def render_project_tab():
     projects = db_manager.get_projects()
     
     if projects:
-        for project in projects:
+        for i, project in enumerate(projects):
             with st.container():
                 col1, col2, col3 = st.columns([3, 1, 1])
                 
@@ -667,12 +792,12 @@ def render_project_tab():
                         st.caption(project['description'])
                 
                 with col2:
-                    if st.button("인플루언서 관리", key=f"manage_{project['id']}"):
+                    if st.button("인플루언서 관리", key=f"manage_{project['id']}_{i}"):
                         st.session_state.selected_project = project
                         st.rerun()
                 
                 with col3:
-                    if st.button("삭제", key=f"delete_{project['id']}"):
+                    if st.button("삭제", key=f"delete_{project['id']}_{i}"):
                         result = db_manager.delete_project(project['id'])
                         if result["success"]:
                             st.success("프로젝트가 삭제되었습니다!")
@@ -758,7 +883,7 @@ def render_influencer_tab():
         
         filtered_influencers = influencers if platform_filter == "전체" else [inf for inf in influencers if inf['platform'] == platform_filter]
         
-        for influencer in filtered_influencers:
+        for i, influencer in enumerate(filtered_influencers):
             with st.container():
                 col1, col2, col3 = st.columns([3, 1, 1])
                 
@@ -767,12 +892,12 @@ def render_influencer_tab():
                     st.caption(f"플랫폼: {influencer['platform']} | 팔로워: {influencer.get('followers_count', 0):,} | 게시물: {influencer.get('post_count', 0):,}")
                 
                 with col2:
-                    if st.button("편집", key=f"edit_{influencer['id']}"):
+                    if st.button("편집", key=f"edit_{influencer['id']}_{i}"):
                         st.session_state.editing_influencer = influencer
                         st.rerun()
                 
                 with col3:
-                    if st.button("삭제", key=f"delete_inf_{influencer['id']}"):
+                    if st.button("삭제", key=f"delete_inf_{influencer['id']}_{i}"):
                         result = db_manager.delete_influencer(influencer['id'])
                         if result["success"]:
                             st.success("인플루언서가 삭제되었습니다!")
@@ -831,7 +956,7 @@ def render_performance_management():
     
     st.subheader("👥 할당된 인플루언서 성과")
     
-    for pi in project_influencers:
+    for i, pi in enumerate(project_influencers):
         with st.container():
             col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
             
@@ -840,17 +965,17 @@ def render_performance_management():
                 st.caption(f"플랫폼: {pi['platform']} | 상태: {pi['status']}")
             
             with col2:
-                if st.button("성과 크롤링", key=f"crawl_{pi['id']}"):
+                if st.button("성과 크롤링", key=f"crawl_{pi['id']}_{i}"):
                     st.session_state.crawling_influencer = pi
                     st.rerun()
             
             with col3:
-                if st.button("성과 입력", key=f"input_{pi['id']}"):
+                if st.button("성과 입력", key=f"input_{pi['id']}_{i}"):
                     st.session_state.inputting_performance = pi
                     st.rerun()
             
             with col4:
-                if st.button("상세보기", key=f"detail_{pi['id']}"):
+                if st.button("상세보기", key=f"detail_{pi['id']}_{i}"):
                     st.session_state.viewing_performance = pi
                     st.rerun()
             
@@ -891,9 +1016,9 @@ def render_performance_crawling_modal():
         st.rerun()
     
     # 크롤링 옵션
-    debug_mode = st.checkbox("🔍 디버그 모드", help="페이지의 HTML 요소들을 확인할 수 있습니다")
+    debug_mode = st.checkbox("🔍 디버그 모드", help="페이지의 HTML 요소들을 확인할 수 있습니다", key="performance_crawl_debug_mode")
     
-    if st.button("🚀 성과 크롤링 시작", type="primary"):
+    if st.button("🚀 성과 크롤링 시작", type="primary", key="performance_crawl_start"):
         with st.spinner(""):
             try:
                 crawler = InstagramCrawler()
